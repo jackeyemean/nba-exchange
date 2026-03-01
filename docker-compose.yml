@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nbaexchange
+      POSTGRES_PASSWORD: nbaexchange
+      POSTGRES_DB: nbaexchange
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["./api"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - .env
+
+  ws:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["./ws"]
+    ports:
+      - "8081:8081"
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - .env
+
+  engine:
+    build:
+      context: ./engine
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - .env
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+      - ws
+    env_file:
+      - .env
+
+volumes:
+  pgdata:

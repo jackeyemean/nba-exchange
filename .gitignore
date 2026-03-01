@@ -1,0 +1,39 @@
+# Go
+backend/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Python
+engine/__pycache__/
+engine/**/__pycache__/
+engine/.venv/
+*.pyc
+*.pyo
+.env
+
+# Node / Next.js
+web/node_modules/
+web/.next/
+web/out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Secrets
+.env
+.env.example
+.env.local
+.env.*.local

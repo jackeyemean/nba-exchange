@@ -1,0 +1,9 @@
+nba_api
+basketball_reference_web_scraper
+psycopg2-binary
+redis
+pandas
+numpy
+python-dotenv
+schedule
+click
