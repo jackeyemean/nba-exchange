@@ -8,6 +8,14 @@ import (
 	"github.com/jacky/nba-exchange/backend/internal/model"
 )
 
+// PriceHistoryRange: all (from 2023-24), season (current), month, week
+const (
+	RangeAll    = "all"
+	RangeSeason = "season"
+	RangeMonth  = "month"
+	RangeWeek   = "week"
+)
+
 type PlayerWithPrice struct {
 	ID               int      `json:"id"`
 	FirstName        string   `json:"firstName"`
@@ -66,7 +74,7 @@ func (r *PlayerRepository) GetPlayerSeasonByID(ctx context.Context, id int) (*mo
 	ps := &model.PlayerSeason{Player: &model.Player{}, Team: &model.Team{}}
 	err := r.Pool.QueryRow(ctx,
 		`SELECT ps.id, ps.player_id, ps.season_id, ps.team_id, ps.tier, ps.float_shares, ps.status, ps.created_at,
-		        p.id, p.external_id, p.first_name, p.last_name, p.birthdate, p.position, p.height, p.weight,
+		        p.id, p.external_id, COALESCE(p.ticker, ''), p.first_name, p.last_name, p.birthdate, p.position, p.height, p.weight,
 		        t.id, t.external_id, t.name, t.abbreviation, t.city
 		 FROM player_seasons ps
 		 JOIN players p ON p.id = ps.player_id
@@ -180,6 +188,77 @@ func (r *PlayerRepository) GetPriceHistory(ctx context.Context, playerSeasonID i
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get price history: %w", err)
+	}
+	defer rows.Close()
+
+	var results []model.PriceHistory
+	for rows.Next() {
+		var ph model.PriceHistory
+		err := rows.Scan(&ph.ID, &ph.PlayerSeasonID, &ph.TradeDate, &ph.PerfScore, &ph.AgeMult, &ph.WinPctMult,
+			&ph.SalaryEffMult, &ph.RawScore, &ph.Price, &ph.MarketCap, &ph.PrevPrice, &ph.ChangePct, &ph.CreatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("scan price history: %w", err)
+		}
+		results = append(results, ph)
+	}
+	return results, rows.Err()
+}
+
+// GetActiveSeasonID returns the current season (most recent by start_date).
+func (r *PlayerRepository) GetActiveSeasonID(ctx context.Context) (int, error) {
+	var id int
+	err := r.Pool.QueryRow(ctx,
+		`SELECT id FROM seasons ORDER BY start_date DESC LIMIT 1`).Scan(&id)
+	if err != nil {
+		return 1, nil // fallback if no seasons
+	}
+	return id, nil
+}
+
+// GetPriceHistoryForPlayer returns price history across all seasons for a player,
+// filtered by range: all (from 2023-24), season (current only), month, week.
+// Results are ordered chronologically (oldest first) for chart display.
+func (r *PlayerRepository) GetPriceHistoryForPlayer(ctx context.Context, playerID, playerSeasonID int, rangeFilter string) ([]model.PriceHistory, error) {
+	var query string
+	var args []interface{}
+
+	switch rangeFilter {
+	case RangeSeason:
+		query = `SELECT ph.id, ph.player_season_id, ph.trade_date, ph.perf_score, ph.age_mult, ph.win_pct_mult,
+		         ph.salary_eff_mult, ph.raw_score, ph.price, ph.market_cap, ph.prev_price, ph.change_pct, ph.created_at
+		         FROM price_history ph
+		         WHERE ph.player_season_id = $1
+		         ORDER BY ph.trade_date ASC`
+		args = []interface{}{playerSeasonID}
+	case RangeMonth:
+		query = `SELECT ph.id, ph.player_season_id, ph.trade_date, ph.perf_score, ph.age_mult, ph.win_pct_mult,
+		         ph.salary_eff_mult, ph.raw_score, ph.price, ph.market_cap, ph.prev_price, ph.change_pct, ph.created_at
+		         FROM price_history ph
+		         JOIN player_seasons ps ON ph.player_season_id = ps.id
+		         WHERE ps.player_id = $1 AND ph.trade_date >= CURRENT_DATE - INTERVAL '30 days'
+		         ORDER BY ph.trade_date ASC`
+		args = []interface{}{playerID}
+	case RangeWeek:
+		query = `SELECT ph.id, ph.player_season_id, ph.trade_date, ph.perf_score, ph.age_mult, ph.win_pct_mult,
+		         ph.salary_eff_mult, ph.raw_score, ph.price, ph.market_cap, ph.prev_price, ph.change_pct, ph.created_at
+		         FROM price_history ph
+		         JOIN player_seasons ps ON ph.player_season_id = ps.id
+		         WHERE ps.player_id = $1 AND ph.trade_date >= CURRENT_DATE - INTERVAL '7 days'
+		         ORDER BY ph.trade_date ASC`
+		args = []interface{}{playerID}
+	default: // RangeAll - from start of 2023-24 simulation
+		query = `SELECT ph.id, ph.player_season_id, ph.trade_date, ph.perf_score, ph.age_mult, ph.win_pct_mult,
+		         ph.salary_eff_mult, ph.raw_score, ph.price, ph.market_cap, ph.prev_price, ph.change_pct, ph.created_at
+		         FROM price_history ph
+		         JOIN player_seasons ps ON ph.player_season_id = ps.id
+		         WHERE ps.player_id = $1 AND ph.trade_date >= '2023-10-24'
+		         ORDER BY ph.trade_date ASC`
+		args = []interface{}{playerID}
+	}
+
+	rows, err := r.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get price history for player: %w", err)
 	}
 	defer rows.Close()
 

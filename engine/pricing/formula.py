@@ -10,23 +10,13 @@ PRIME_END = 32.0
 AGING_CAP_AGE = 38.0
 
 YOUTH_PURE_PER_YEAR = 0.007
-YOUTH_PERF_PER_YEAR = 0.015
+YOUTH_PERF_PER_YEAR = 0.055   # Elite young players (Flagg, Wemby, etc.) reach 1.4x ceiling
 AGING_PURE_PER_YEAR = 0.026
-AGING_PERF_PER_YEAR = 0.0217
+AGING_PERF_PER_YEAR = 0.040   # More aggressive: low-perf older players get bigger tax
 
 RAW_PERF_CAP_FOR_AGE = 100.0
 AGE_MULT_FLOOR = 0.70
-AGE_MULT_CEILING = 1.25
-
-SALARY_EFF_BRACKETS = [
-    (1.5, 1.20),
-    (1.2, 1.15),
-    (0.9, 1.10),
-    (0.7, 1.00),
-    (0.5, 0.95),
-    (0.3, 0.90),
-]
-SALARY_EFF_DEFAULT = 0.85
+AGE_MULT_CEILING = 1.40  # Young high performers can get up to 1.40x boost
 
 INJURY_SHOCK = 0.50
 
@@ -40,13 +30,13 @@ def calculate_raw_perf(pts: float, fgm: float, fga: float, ftm: float,
     fg3mi = fg3a - fg3m
     return (
         (pts * 1.0)
-        + (fgm * 0.5) + (fgmi * -0.5)
+        + (fgm * 1.0) + (fgmi * -1.0)
         + (ftm * 1.0) + (ftmi * -1.0)
-        + (fg3m * 2.0) + (fg3mi * -1.0)
-        + (oreb * 0.5) + (dreb * 0.5)
-        + (ast * 1.5)
-        + (stl * 3.0) + (blk * 3.0)
-        + (tov * -1.0)
+        + (fg3m * 1.0)
+        + (oreb * 1.0) + (dreb * 1.0)
+        + (ast * 2.0)
+        + (stl * 4.0) + (blk * 4.0)
+        + (tov * -2)
     )
 
 
@@ -77,32 +67,17 @@ def get_age_multiplier(birthdate: date | None, perf_score: float = 50.0) -> floa
 
 
 def get_win_pct_multiplier(team_win_pct: float, all_team_win_pcts: list[float]) -> float:
+    """Linear 0.90 (worst) to 1.15 (best) by league rank. Capped +15% / −10%."""
     if not all_team_win_pcts:
         return 1.00
     sorted_pcts = sorted(all_team_win_pcts)
     n = len(sorted_pcts)
-    rank = sum(1 for pct in sorted_pcts if pct <= team_win_pct)
-    percentile = rank / n
-
-    if percentile >= 0.90:
-        return 1.15
-    if percentile >= 0.75:
-        return 1.08
-    if percentile >= 0.25:
+    rank = sum(1 for pct in sorted_pcts if pct <= team_win_pct)  # 1=worst, n=best
+    if n <= 1:
         return 1.00
-    if percentile >= 0.10:
-        return 0.93
-    return 0.87
-
-
-def get_salary_efficiency_multiplier(perf_score: float, salary_percentile: float) -> float:
-    if salary_percentile <= 0:
-        return 1.00
-    efficiency = perf_score / salary_percentile
-    for threshold, mult in SALARY_EFF_BRACKETS:
-        if efficiency > threshold:
-            return mult
-    return SALARY_EFF_DEFAULT
+    # Linear: rank 1 → 0.90, rank n → 1.15 (25-point spread)
+    t = (rank - 1) / (n - 1)
+    return 0.90 + 0.25 * t
 
 
 def calculate_all_prices(conn, season_id: int, trade_date: date, scaling_factor: float) -> list[dict]:
@@ -161,15 +136,6 @@ def calculate_all_prices(conn, season_id: int, trade_date: date, scaling_factor:
 
     all_win_pcts = list(standings.values())
 
-    salary_map = {}
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT player_id, percentile FROM player_salaries WHERE season_id = %s",
-            (season_id,),
-        )
-        for row in cur.fetchall():
-            salary_map[row[0]] = float(row[1])
-
     prev_prices = {}
     with conn.cursor() as cur:
         cur.execute(
@@ -193,10 +159,8 @@ def calculate_all_prices(conn, season_id: int, trade_date: date, scaling_factor:
         age_mult = get_age_multiplier(pd_["birthdate"], perf_score)
         win_pct = standings.get(pd_["team_id"], 0.5)
         win_pct_mult = get_win_pct_multiplier(win_pct, all_win_pcts)
-        sal_pct = salary_map.get(pd_["player_id"], 50.0)
-        sal_eff_mult = get_salary_efficiency_multiplier(perf_score, sal_pct)
 
-        raw_score = perf_score * age_mult * win_pct_mult * sal_eff_mult
+        raw_score = perf_score * age_mult * win_pct_mult
         price = raw_score * scaling_factor
 
         prev_price = prev_prices.get(pd_["ps_id"])
@@ -215,7 +179,7 @@ def calculate_all_prices(conn, season_id: int, trade_date: date, scaling_factor:
             "perf_score": round(perf_score, 4),
             "age_mult": age_mult,
             "win_pct_mult": win_pct_mult,
-            "salary_eff_mult": sal_eff_mult,
+            "salary_eff_mult": 1.0,
             "raw_score": round(raw_score, 4),
             "price": round(price, 2),
             "market_cap": round(market_cap, 2),

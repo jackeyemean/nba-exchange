@@ -1,0 +1,1 @@
+ALTER TABLE game_stats DROP COLUMN IF EXISTS wl;

@@ -16,8 +16,11 @@ import db
 log = logging.getLogger(__name__)
 
 FLOAT_SHARES = {
-    "magnificent_7": 10_000_000, "blue_chip": 8_500_000, "growth": 7_000_000,
-    "mid_cap": 5_000_000, "small_cap": 3_000_000, "penny_stock": 500_000,
+    "magnificent_7": 10_000_000,
+    "blue_chip": 8_000_000,
+    "growth": 6_400_000,
+    "mid_cap": 5_120_000,
+    "penny_stock": 2_560_000,
 }
 
 REQUEST_DELAY = 0.6
@@ -56,8 +59,6 @@ def _classify_tier(avg_minutes: float) -> str:
         return "growth"
     if avg_minutes >= 20:
         return "mid_cap"
-    if avg_minutes >= 12:
-        return "small_cap"
     return "penny_stock"
 
 

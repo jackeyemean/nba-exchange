@@ -15,9 +15,10 @@ import { formatCurrency } from "@/lib/utils";
 interface PriceChartProps {
   data: { date: string; price: number }[];
   height?: number;
+  range?: "all" | "season" | "month" | "week";
 }
 
-export function PriceChart({ data, height = 300 }: PriceChartProps) {
+export function PriceChart({ data, height = 300, range = "all" }: PriceChartProps) {
   if (data.length === 0) {
     return (
       <div
@@ -34,14 +35,16 @@ export function PriceChart({ data, height = 300 }: PriceChartProps) {
   const color = isPositive ? "#16a34a" : "#dc2626";
   const gradientId = `priceGradient-${isPositive ? "up" : "down"}`;
 
-  const chartData = useMemo(
-    () =>
-      data.map((d, i) => ({
-        ...d,
-        day: i + 1,
-      })),
-    [data],
-  );
+  const chartData = useMemo(() => {
+    const useDateAxis = range === "all" || data.length > 60;
+    return data.map((d, i) => ({
+      ...d,
+      day: i + 1,
+      label: useDateAxis && d.date
+        ? new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: range === "all" ? "2-digit" : undefined })
+        : `Day ${i + 1}`,
+    }));
+  }, [data, range]);
 
   const { yMin, yMax } = useMemo(() => {
     const prices = data.map((d) => d.price);
@@ -65,12 +68,12 @@ export function PriceChart({ data, height = 300 }: PriceChartProps) {
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.1} />
         <XAxis
-          dataKey="day"
-          tick={{ fontSize: 11 }}
+          dataKey={range === "all" || data.length > 60 ? "label" : "day"}
+          tick={{ fontSize: 10 }}
           stroke="#888"
           tickLine={false}
           label={{
-            value: "Trading Day",
+            value: range === "all" || data.length > 60 ? "Date" : "Trading Day",
             position: "insideBottomRight",
             offset: -5,
             fontSize: 11,
@@ -92,13 +95,13 @@ export function PriceChart({ data, height = 300 }: PriceChartProps) {
             borderRadius: 8,
             fontSize: 12,
           }}
-          labelFormatter={(label, payload) => {
+          labelFormatter={(_, payload) => {
             const item = payload?.[0]?.payload;
             if (item?.date) {
               const d = new Date(item.date);
-              return `Day ${label} · ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+              return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
             }
-            return `Day ${label}`;
+            return item?.label ?? "";
           }}
           formatter={(value: number) => [formatCurrency(value), "Price"]}
         />

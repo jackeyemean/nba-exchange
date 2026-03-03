@@ -17,10 +17,14 @@ func NewPlayerHandler(players *repository.PlayerRepository) *PlayerHandler {
 }
 
 func (h *PlayerHandler) ListActive(c *gin.Context) {
-	seasonID, err := strconv.Atoi(c.DefaultQuery("season_id", "1"))
+	seasonID, err := strconv.Atoi(c.DefaultQuery("season_id", "0"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid season_id"})
 		return
+	}
+	if seasonID == 0 {
+		// Default to active season (2025-26)
+		seasonID, _ = h.Players.GetActiveSeasonID(c.Request.Context())
 	}
 
 	players, err := h.Players.ListActiveWithPrices(c.Request.Context(), seasonID)
@@ -45,7 +49,12 @@ func (h *PlayerHandler) GetDetail(c *gin.Context) {
 		return
 	}
 
-	history, err := h.Players.GetPriceHistory(c.Request.Context(), id, 365)
+	rangeFilter := c.DefaultQuery("range", "all")
+	if rangeFilter != "all" && rangeFilter != "season" && rangeFilter != "month" && rangeFilter != "week" {
+		rangeFilter = "all"
+	}
+
+	history, err := h.Players.GetPriceHistoryForPlayer(c.Request.Context(), playerSeason.PlayerID, id, rangeFilter)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch price history"})
 		return

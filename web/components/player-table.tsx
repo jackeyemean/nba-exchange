@@ -5,6 +5,7 @@ import { formatCurrency, formatCompact, formatPct, pctColor } from "@/lib/utils"
 
 interface PlayerRow {
   id: number;
+  ticker?: string;
   firstName: string;
   lastName: string;
   position: string;
@@ -21,9 +22,17 @@ const TIER_STYLES: Record<string, { bg: string; text: string; label: string }> =
   blue_chip:     { bg: "bg-blue-100 dark:bg-blue-900/40",   text: "text-blue-800 dark:text-blue-300",   label: "Blue Chip" },
   growth:        { bg: "bg-emerald-100 dark:bg-emerald-900/40", text: "text-emerald-800 dark:text-emerald-300", label: "Growth" },
   mid_cap:       { bg: "bg-purple-100 dark:bg-purple-900/40", text: "text-purple-800 dark:text-purple-300", label: "Mid Cap" },
-  small_cap:     { bg: "bg-neutral-100 dark:bg-neutral-800",  text: "text-neutral-600 dark:text-neutral-400", label: "Small Cap" },
   penny_stock:   { bg: "bg-red-50 dark:bg-red-900/20", text: "text-red-600 dark:text-red-400", label: "Penny" },
+  // Legacy: small_cap maps to penny for display
+  small_cap:     { bg: "bg-red-50 dark:bg-red-900/20", text: "text-red-600 dark:text-red-400", label: "Penny" },
 };
+
+function getTicker(p: PlayerRow): string {
+  if (p.ticker && p.ticker.trim()) return p.ticker;
+  const f = (p.firstName || "").replace(/[^a-zA-Z]/g, "").slice(0, 2) || (p.firstName || "").slice(0, 1);
+  const l = (p.lastName || "").replace(/[^a-zA-Z]/g, "").slice(0, 2) || (p.lastName || "").slice(0, 1);
+  return (f + l).toUpperCase() || "—";
+}
 
 function TierBadge({ tier }: { tier: string }) {
   const style = TIER_STYLES[tier] || TIER_STYLES.penny_stock;
@@ -41,6 +50,7 @@ export function PlayerTable({ players }: { players: PlayerRow[] }) {
         <thead>
           <tr className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
             <th className="w-10 px-3 py-3 text-center font-medium text-neutral-600 dark:text-neutral-400">#</th>
+            <th className="px-3 py-3 text-left font-medium text-neutral-600 dark:text-neutral-400">Ticker</th>
             <th className="px-4 py-3 text-left font-medium text-neutral-600 dark:text-neutral-400">Player</th>
             <th className="px-4 py-3 text-left font-medium text-neutral-600 dark:text-neutral-400">Pos</th>
             <th className="px-4 py-3 text-left font-medium text-neutral-600 dark:text-neutral-400">Team</th>
@@ -59,6 +69,9 @@ export function PlayerTable({ players }: { players: PlayerRow[] }) {
               >
                 <td className="w-10 px-3 py-3 text-center font-mono text-neutral-400 dark:text-neutral-500">
                   {idx + 1}
+                </td>
+                <td className="px-3 py-3 font-mono text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+                  {getTicker(p)}
                 </td>
                 <td className="px-4 py-3">
                   <Link

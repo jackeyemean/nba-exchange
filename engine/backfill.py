@@ -16,7 +16,7 @@ import numpy as np
 import psycopg2
 
 from config import get_db_connection
-from pricing.formula import calculate_raw_perf, get_age_multiplier
+from pricing.formula import calculate_raw_perf, get_age_multiplier, get_win_pct_multiplier
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,22 +27,24 @@ log = logging.getLogger("backfill")
 
 REQUEST_DELAY = 0.7
 
+# Tier structure: Mag 7 = top 7, Blue Chip = top 40, Growth = top 150, Mid Cap = top 250
+# small_cap removed - rest are penny_stock
 TIER_RANKS = [
     ("magnificent_7", 7),
-    ("blue_chip", 30),
-    ("growth", 70),
-    ("mid_cap", 150),
-    ("small_cap", 300),
+    ("blue_chip", 40),
+    ("growth", 150),
+    ("mid_cap", 250),
 ]
 TIER_DEFAULT = "penny_stock"
 
+# Tier premiums: penny->mid 2x, all other jumps 1.25x
+# Shares chosen so: mid=2*penny, growth=1.25*mid, blue=1.25*growth, mag7=1.25*blue
 FLOAT_SHARES = {
     "magnificent_7": 10_000_000,
-    "blue_chip": 8_500_000,
-    "growth": 7_000_000,
-    "mid_cap": 5_000_000,
-    "small_cap": 3_000_000,
-    "penny_stock": 500_000,
+    "blue_chip": 8_000_000,   # mag7/1.25
+    "growth": 6_400_000,      # blue/1.25
+    "mid_cap": 5_120_000,     # growth/1.25
+    "penny_stock": 2_560_000, # mid/2
 }
 
 INJURY_FREEZE_GAMES = 30
@@ -50,7 +52,6 @@ INJURY_MAX_TOTAL = 0.30
 
 PRICE_CEILING = 275.0
 PRICE_EXPONENT = 1.5
-RAW_PERF_CAP = 100.0
 
 SEASON_START = date(2025, 10, 22)
 
@@ -58,6 +59,27 @@ _INJURY_CURVE = []
 for _i in range(1, INJURY_FREEZE_GAMES + 1):
     frac = _i / INJURY_FREEZE_GAMES
     _INJURY_CURVE.append(INJURY_MAX_TOTAL * (frac ** 2))
+
+
+def get_team_win_pcts_as_of_date(conn, season_id: int, as_of_date: date) -> dict[int, float]:
+    """Compute each team's win% from game_stats (using wl) for games on or before as_of_date."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH team_games AS (
+                SELECT DISTINCT ON (ps.team_id, gs.external_game_id) ps.team_id, gs.wl
+                FROM game_stats gs
+                JOIN player_seasons ps ON gs.player_season_id = ps.id
+                WHERE ps.season_id = %s AND gs.game_date <= %s AND gs.wl IN ('W', 'L')
+            )
+            SELECT team_id,
+                   COUNT(*) FILTER (WHERE wl = 'W')::float / NULLIF(COUNT(*), 0) as win_pct
+            FROM team_games
+            GROUP BY team_id
+            """,
+            (season_id, as_of_date),
+        )
+        return {row[0]: float(row[1]) for row in cur.fetchall()}
 
 
 def get_injury_mult(consecutive_missed: int) -> float:
@@ -142,13 +164,12 @@ def _extract_raw_perf_from_row(row) -> float:
 
 
 def _rookie_tier_from_pick(overall_pick: int) -> str:
-    """Assign rookie tier based on draft position."""
+    """Assign rookie tier based on draft position.
+    Lottery (1-14) -> growth, first round/early second (15-39) -> mid_cap, else -> penny_stock."""
     if 1 <= overall_pick <= 14:
         return "growth"
-    if 15 <= overall_pick <= 30:
+    if 15 <= overall_pick <= 39:
         return "mid_cap"
-    if 31 <= overall_pick <= 60:
-        return "small_cap"
     return "penny_stock"
 
 
@@ -164,8 +185,7 @@ YEAR0_TIER_OVERRIDES = {
         "1630581", "1630530", "1628374", "1630552", "1630567", "1630559", "202696",
     ],
     "mid_cap": ["1630166", "1641718", "203954", "1627749"],
-    "small_cap": [],
-    "penny_stock": ["1642263", "1629674", "1642918", "1642404","1631157", "1629645", "1631212", "1630230"],
+    "penny_stock": ["1642263", "1629674", "1642918", "1642404", "1631157", "1629645", "1631212", "1630230"],
 }
 
 
@@ -352,9 +372,172 @@ def backfill_players_and_stats(conn, season_id: int, season_label: str):
     log.info("Fetched %d birthdates", fetched)
 
 
+def backfill_players_and_stats_uniform(
+    conn, season_id: int, season_label: str, uniform_float_shares: int
+):
+    """Fetch all players for the season with uniform float_shares (for tier bootstrap simulation)."""
+    from nba_api.stats.endpoints import (
+        LeagueDashPlayerStats,
+        CommonPlayerInfo,
+        CommonAllPlayers,
+    )
+
+    log.info("Fetching current season player stats (uniform shares=%d)...", uniform_float_shares)
+    resp = safe_request(
+        LeagueDashPlayerStats,
+        season=season_label,
+        season_type_all_star="Regular Season",
+        per_mode_detailed="PerGame",
+    )
+    df = resp.get_data_frames()[0]
+    log.info("Found %d players in season stats", len(df))
+
+    team_id_map = {}
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, external_id FROM teams")
+        for row in cur.fetchall():
+            team_id_map[row[1]] = row[0]
+
+    player_rows = []
+    for _, row in df.iterrows():
+        ext_id = str(row["PLAYER_ID"])
+        name = row.get("PLAYER_NAME", "")
+        parts = name.split(" ", 1) if name else ["", ""]
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ""
+        team_ext = str(row.get("TEAM_ID", "0"))
+        if not first_name:
+            continue
+        team_db_id = team_id_map.get(team_ext)
+        if not team_db_id:
+            continue
+        player_rows.append((ext_id, first_name, last_name, team_db_id))
+
+    seen_ext_ids = set()
+    player_count = 0
+    for ext_id, first_name, last_name, team_db_id in player_rows:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO players (external_id, first_name, last_name)
+                   VALUES (%s, %s, %s)
+                   ON CONFLICT (external_id) DO UPDATE SET
+                       first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name
+                   RETURNING id""",
+                (ext_id, first_name, last_name),
+            )
+            player_db_id = cur.fetchone()[0]
+            cur.execute(
+                """INSERT INTO player_seasons (player_id, season_id, team_id, tier, float_shares)
+                   VALUES (%s, %s, %s, %s, %s)
+                   ON CONFLICT (player_id, season_id) DO UPDATE SET
+                       team_id = EXCLUDED.team_id, tier = EXCLUDED.tier, float_shares = EXCLUDED.float_shares
+                   RETURNING id""",
+                (player_db_id, season_id, team_db_id, TIER_DEFAULT, uniform_float_shares),
+            )
+            cur.fetchone()
+        seen_ext_ids.add(ext_id)
+        player_count += 1
+
+    conn.commit()
+    log.info("Synced %d players with game stats", player_count)
+
+    log.info("Fetching rostered players (including those with 0 games)...")
+    try:
+        time.sleep(1)
+        resp2 = safe_request(CommonAllPlayers, is_only_current_season=1, season=season_label)
+        roster_df = resp2.get_data_frames()[0]
+        rostered_only = roster_df[roster_df["ROSTERSTATUS"] == 1]
+
+        added = 0
+        for _, row in rostered_only.iterrows():
+            ext_id = str(row["PERSON_ID"])
+            if ext_id in seen_ext_ids:
+                continue
+            name = row.get("DISPLAY_FIRST_LAST", "")
+            parts = name.split(" ", 1) if name else ["", ""]
+            first_name = parts[0]
+            last_name = parts[1] if len(parts) > 1 else ""
+            team_ext = str(row.get("TEAM_ID", "0"))
+            if not first_name:
+                continue
+            team_db_id = team_id_map.get(team_ext)
+            if not team_db_id:
+                continue
+
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO players (external_id, first_name, last_name)
+                       VALUES (%s, %s, %s)
+                       ON CONFLICT (external_id) DO UPDATE SET
+                           first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name
+                       RETURNING id""",
+                    (ext_id, first_name, last_name),
+                )
+                player_db_id = cur.fetchone()[0]
+                cur.execute(
+                    """INSERT INTO player_seasons (player_id, season_id, team_id, tier, float_shares, status)
+                       VALUES (%s, %s, %s, %s, %s, 'active')
+                       ON CONFLICT (player_id, season_id) DO UPDATE SET
+                           tier = EXCLUDED.tier, float_shares = EXCLUDED.float_shares""",
+                    (player_db_id, season_id, team_db_id, TIER_DEFAULT, uniform_float_shares),
+                )
+            seen_ext_ids.add(ext_id)
+            added += 1
+
+        conn.commit()
+        log.info("Added %d rostered players with 0 games played", added)
+    except Exception:
+        log.warning("Failed to fetch rostered players, continuing with game-stats players only")
+
+    log.info("Total players: %d", len(seen_ext_ids))
+
+    log.info("Fetching player birthdates (this takes a few minutes)...")
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT p.id, p.external_id FROM players p JOIN player_seasons ps ON p.id = ps.player_id WHERE ps.season_id = %s AND p.birthdate IS NULL",
+            (season_id,),
+        )
+        missing_bdays = cur.fetchall()
+
+    fetched = 0
+    for pid, ext_id in missing_bdays:
+        try:
+            resp = safe_request(CommonPlayerInfo, player_id=ext_id)
+            info_df = resp.get_data_frames()[0]
+            if not info_df.empty:
+                bday_str = info_df.iloc[0].get("BIRTHDATE", None)
+                position = info_df.iloc[0].get("POSITION", None)
+                if bday_str:
+                    bday = datetime.strptime(str(bday_str)[:10], "%Y-%m-%d").date()
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE players SET birthdate = %s, position = %s WHERE id = %s",
+                            (bday, position, pid),
+                        )
+            fetched += 1
+            if fetched % 50 == 0:
+                conn.commit()
+                log.info("  ...fetched %d / %d birthdates", fetched, len(missing_bdays))
+        except Exception:
+            log.debug("Failed to fetch info for player %s", ext_id)
+
+    conn.commit()
+    log.info("Fetched %d birthdates", fetched)
+
+
 def backfill_game_logs(conn, season_id: int, season_label: str):
     """Fetch game logs using bulk LeagueGameLog endpoint (far fewer API calls)."""
     from nba_api.stats.endpoints import LeagueGameLog
+
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'game_stats' AND column_name = 'wl'
+        """)
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE game_stats ADD COLUMN wl CHAR(1)")
+            conn.commit()
+            log.info("Added wl column to game_stats")
 
     with conn.cursor() as cur:
         cur.execute(
@@ -404,6 +587,10 @@ def backfill_game_logs(conn, season_id: int, season_label: str):
         if not game_date_str or not game_id:
             continue
 
+        wl = str(row.get("WL", "") or "")[:1].upper() or None
+        if wl and wl not in ("W", "L"):
+            wl = None
+
         pts = int(row.get("PTS", 0) or 0)
         ast = int(row.get("AST", 0) or 0)
         reb = int(row.get("REB", 0) or 0)
@@ -437,6 +624,7 @@ def backfill_game_logs(conn, season_id: int, season_label: str):
             pts, ast, reb, stl, blk, tov, fgm, fga, ftm, fta,
             fg3m, fg3a, oreb, dreb,
             round(raw_perf, 4), round(ts_pct, 4),
+            wl,
         ))
 
     log.info("Prepared %d stat rows for insertion", len(rows_to_insert))
@@ -448,9 +636,11 @@ def backfill_game_logs(conn, season_id: int, season_label: str):
                    (player_season_id, game_date, external_game_id, minutes,
                     pts, ast, reb, stl, blk, tov, fgm, fga, ftm, fta,
                     fg3m, fg3a, oreb, dreb,
-                    raw_perf_score, ts_pct)
+                    raw_perf_score, ts_pct, wl)
                VALUES %s
-               ON CONFLICT (player_season_id, external_game_id) DO NOTHING""",
+               ON CONFLICT (player_season_id, external_game_id) DO UPDATE SET
+                   raw_perf_score = EXCLUDED.raw_perf_score, ts_pct = EXCLUDED.ts_pct,
+                   wl = COALESCE(EXCLUDED.wl, game_stats.wl)""",
             rows_to_insert,
             page_size=1000,
         )
@@ -516,15 +706,25 @@ def fetch_prior_season_averages(season_label: str) -> dict:
     return priors
 
 
-def compute_historical_prices(conn, season_id: int, prior_avgs: dict):
+def compute_historical_prices(
+    conn,
+    season_id: int,
+    prior_avgs: dict,
+    season_start: date | None = None,
+    as_of_date: date | None = None,
+):
     """
     Formula v2: raw performance scores (no cross-player normalization),
     prior-season blend, recent-form weighting, gentle availability discount.
+
+    If season_start is None, uses SEASON_START. If as_of_date is None, uses today.
     """
-    log.info("Computing historical prices (v2 formula)...")
+    start = season_start or SEASON_START
+    end = as_of_date or date.today()
+    log.info("Computing historical prices (v2 formula) from %s to %s...", start, end)
 
     PRIOR_BLEND_GAMES = 10
-    RECENT_WINDOW = 10
+    RECENT_WINDOW = 15
     RECENT_WEIGHT = 0.20
 
     with conn.cursor() as cur:
@@ -568,10 +768,9 @@ def compute_historical_prices(conn, season_id: int, prior_avgs: dict):
                 "blk": float(row[13]), "tov": float(row[14]),
             })
 
-    today = date.today()
-    current = SEASON_START
+    current = start
     trade_days = []
-    while current <= today:
+    while current <= end:
         if current.weekday() < 5:
             trade_days.append(current)
         current += timedelta(days=1)
@@ -585,7 +784,11 @@ def compute_historical_prices(conn, season_id: int, prior_avgs: dict):
 
     for td_idx, trade_date in enumerate(trade_days):
         rows_to_insert = []
+        team_win_pcts = get_team_win_pcts_as_of_date(conn, season_id, trade_date)
+        all_win_pcts = list(team_win_pcts.values()) if team_win_pcts else []
 
+        # First pass: compute blended_raw for all players this day
+        day_data = []
         for ps_id, player_id, team_id, float_shares, status, birthdate, ext_id in all_players:
             stats = game_stats_by_player.get(ps_id, [])
             games_before = [s for s in stats if s["game_date"] <= trade_date]
@@ -621,24 +824,36 @@ def compute_historical_prices(conn, season_id: int, prior_avgs: dict):
                     blended_raw = (1 - prior_weight) * blended_raw + prior_weight * prior_raw
 
             perf_score = max(0.5, blended_raw)
-            normalized = min(1.0, perf_score / RAW_PERF_CAP)
+            day_data.append((ps_id, player_id, team_id, float_shares, status, birthdate,
+                            ext_id, perf_score, blended_raw, games_before, n_games, prior_raw))
+
+        max_raw = max(d[8] for d in day_data) if day_data else 100.0  # blended_raw
+        age_perf_scale = max_raw if max_raw > 0 else 100.0
+
+        for (ps_id, player_id, team_id, float_shares, status, birthdate, ext_id,
+             perf_score, blended_raw, games_before, n_games, prior_raw) in day_data:
+            normalized = perf_score / 100.0  # No cap — elite performers can exceed $275 base
             base_price = (normalized ** PRICE_EXPONENT) * PRICE_CEILING
 
-            age_mult = get_age_multiplier(birthdate, perf_score)
+            # Normalize perf for age mult so top performer that day gets 1.0 (reaches 1.4x ceiling)
+            age_perf_score = min(100.0, blended_raw / age_perf_scale * 100.0)
+            age_mult = get_age_multiplier(birthdate, age_perf_score)
 
             if n_games > 0:
                 last_game = max(s["game_date"] for s in games_before)
                 days_since = (trade_date - last_game).days
                 consecutive_missed = max(0, (days_since - 2) // 2)
             elif prior_raw is not None:
-                days_into = (trade_date - SEASON_START).days
+                days_into = (trade_date - start).days
                 consecutive_missed = max(0, days_into // 2)
             else:
                 consecutive_missed = 0
 
             injury_mult = get_injury_mult(consecutive_missed)
+            win_pct = team_win_pcts.get(team_id, 0.5)
+            win_pct_mult = get_win_pct_multiplier(win_pct, all_win_pcts)
 
-            raw_score = base_price * age_mult * injury_mult
+            raw_score = base_price * age_mult * injury_mult * win_pct_mult
             price = round(raw_score, 2)
             if price < 0.01:
                 price = 0.01
@@ -651,7 +866,7 @@ def compute_historical_prices(conn, season_id: int, prior_avgs: dict):
 
             rows_to_insert.append((
                 ps_id, trade_date, round(float(perf_score), 4), float(age_mult),
-                1.0, round(float(injury_mult), 4), round(float(raw_score), 4), float(price),
+                round(float(win_pct_mult), 4), round(float(injury_mult), 4), round(float(raw_score), 4), float(price),
                 float(mcap), float(prev_price) if prev_price else None,
                 float(change_pct) if change_pct is not None else None,
             ))
@@ -737,12 +952,11 @@ def apply_year0_tiers_from_prices(conn, season_id: int, season_label: str):
     manual_counts = {t: len(pids) for t, pids in YEAR0_TIER_OVERRIDES.items()}
     slots_remaining = {
         "magnificent_7": 7 - manual_counts.get("magnificent_7", 0),
-        "blue_chip": 33 - manual_counts.get("blue_chip", 0),
-        "growth": 40 - manual_counts.get("growth", 0),
-        "mid_cap": 80 - manual_counts.get("mid_cap", 0),
-        "small_cap": 0 - manual_counts.get("small_cap", 0),
+        "blue_chip": 33 - manual_counts.get("blue_chip", 0),  # 40 - 7
+        "growth": 110 - manual_counts.get("growth", 0),  # 150 - 40
+        "mid_cap": 100 - manual_counts.get("mid_cap", 0),  # 250 - 150
     }
-    tier_order = ["magnificent_7", "blue_chip", "growth", "mid_cap", "small_cap"]
+    tier_order = ["magnificent_7", "blue_chip", "growth", "mid_cap"]
     idx = 0
     for tier in tier_order:
         for _ in range(slots_remaining[tier]):

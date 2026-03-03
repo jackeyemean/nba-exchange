@@ -9,7 +9,6 @@ import time as time_mod
 from config import get_db_connection
 import db
 from ingestion.nba_stats import sync_teams, sync_players, sync_standings, sync_game_stats
-from ingestion.salaries import sync_salaries
 from pricing.worker import run_daily_pricing
 from indexes.calculator import rebalance_indexes, setup_default_indexes
 
@@ -72,7 +71,7 @@ def rebalance(season: str):
 @cli.command("sync-all")
 @click.option("--season", required=True, help="Season label, e.g. 2025-26")
 def sync_all(season: str):
-    """Full sync: teams, players, standings, salaries."""
+    """Full sync: teams, players, standings."""
     conn = get_db_connection()
     try:
         log.info("Starting full sync for %s", season)
@@ -80,14 +79,18 @@ def sync_all(season: str):
         sync_players(conn, season)
         sync_standings(conn, season)
 
-        parts = season.split("-")
-        season_year = int(parts[0])
-        sync_salaries(conn, season_year)
-
         setup_default_indexes(conn, db.get_season_by_label(conn, season)["id"])
         log.info("Full sync complete")
     finally:
         conn.close()
+
+
+@cli.command("tier-bootstrap")
+def tier_bootstrap():
+    """Run full tier bootstrap: simulate 2023-24 and 2024-25 with uniform shares,
+    assign tiers from ranking, then simulate 2025-26 with tier-based shares."""
+    from tier_bootstrap_simulation import main as run_bootstrap
+    run_bootstrap()
 
 
 @cli.command("schedule")

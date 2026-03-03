@@ -63,8 +63,9 @@ class ApiClient {
     return this.request<{ players: any[] }>("/api/players");
   }
 
-  getPlayer(id: number) {
-    return this.request<{ player: any; prices: any[] }>(`/api/players/${id}`);
+  getPlayer(id: number, range?: "all" | "season" | "month" | "week") {
+    const params = range ? `?range=${range}` : "";
+    return this.request<{ player: any; prices: any[] }>(`/api/players/${id}${params}`);
   }
 
   // Trading

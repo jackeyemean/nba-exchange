@@ -31,7 +31,7 @@ Prices update at market open (9:30 AM ET) based on the previous day's games.
 Performance Score = (PTS×2.0) + (AST×1.5) + (REB×1.2) + (STL×2.0) + (BLK×1.5) - (TOV×1.8) + (TS%×20)
 → Normalized to 0-100 across all players
 
-Final Price = (PerfScore × AgeMult × WinPctMult × SalaryEffMult) × ScalingFactor
+Final Price = (PerfScore × AgeMult × WinPctMult) × ScalingFactor
 Market Cap  = Price × FloatShares
 ```
 
@@ -61,6 +61,7 @@ docker compose up -d postgres redis
 
 ```bash
 psql $DATABASE_URL -f migrations/001_initial_schema.up.sql
+psql $DATABASE_URL -f migrations/002_game_stats_wl.up.sql
 ```
 
 ### 3. Set up environment
