@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -31,28 +32,58 @@ export function PriceChart({ data, height = 300 }: PriceChartProps) {
   const isPositive =
     data.length >= 2 && data[data.length - 1].price >= data[0].price;
   const color = isPositive ? "#16a34a" : "#dc2626";
+  const gradientId = `priceGradient-${isPositive ? "up" : "down"}`;
+
+  const chartData = useMemo(
+    () =>
+      data.map((d, i) => ({
+        ...d,
+        day: i + 1,
+      })),
+    [data],
+  );
+
+  const { yMin, yMax } = useMemo(() => {
+    const prices = data.map((d) => d.price);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const padding = Math.max((max - min) * 0.15, max * 0.02);
+    return {
+      yMin: Math.floor((min - padding) * 100) / 100,
+      yMax: Math.ceil((max + padding) * 100) / 100,
+    };
+  }, [data]);
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data}>
+      <AreaChart data={chartData}>
         <defs>
-          <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.2} />
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.1} />
         <XAxis
-          dataKey="date"
+          dataKey="day"
           tick={{ fontSize: 11 }}
           stroke="#888"
           tickLine={false}
+          label={{
+            value: "Trading Day",
+            position: "insideBottomRight",
+            offset: -5,
+            fontSize: 11,
+            fill: "#888",
+          }}
+          interval="preserveStartEnd"
         />
         <YAxis
+          domain={[yMin, yMax]}
           tick={{ fontSize: 11 }}
           stroke="#888"
           tickLine={false}
-          tickFormatter={(v) => `$${v}`}
+          tickFormatter={(v) => `$${v.toFixed(0)}`}
         />
         <Tooltip
           contentStyle={{
@@ -61,6 +92,14 @@ export function PriceChart({ data, height = 300 }: PriceChartProps) {
             borderRadius: 8,
             fontSize: 12,
           }}
+          labelFormatter={(label, payload) => {
+            const item = payload?.[0]?.payload;
+            if (item?.date) {
+              const d = new Date(item.date);
+              return `Day ${label} · ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+            }
+            return `Day ${label}`;
+          }}
           formatter={(value: number) => [formatCurrency(value), "Price"]}
         />
         <Area
@@ -68,7 +107,7 @@ export function PriceChart({ data, height = 300 }: PriceChartProps) {
           dataKey="price"
           stroke={color}
           strokeWidth={2}
-          fill="url(#priceGradient)"
+          fill={`url(#${gradientId})`}
         />
       </AreaChart>
     </ResponsiveContainer>

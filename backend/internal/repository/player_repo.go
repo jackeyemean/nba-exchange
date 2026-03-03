@@ -88,7 +88,12 @@ func (r *PlayerRepository) ListActiveWithPrices(ctx context.Context, seasonID in
 	rows, err := r.Pool.Query(ctx,
 		`SELECT ps.id, p.first_name, p.last_name, COALESCE(p.position, ''), t.abbreviation,
 		        ps.tier::text, ps.float_shares, ps.status::text,
-		        ph.price, ph.change_pct, ph.market_cap
+		        ph.price,
+		        CASE WHEN prev.price IS NOT NULL AND prev.price > 0
+		             THEN ROUND((ph.price - prev.price) / prev.price, 4)
+		             ELSE ph.change_pct
+		        END AS change_pct,
+		        ph.market_cap
 		 FROM player_seasons ps
 		 JOIN players p ON p.id = ps.player_id
 		 JOIN teams t ON t.id = ps.team_id
@@ -99,6 +104,13 @@ func (r *PlayerRepository) ListActiveWithPrices(ctx context.Context, seasonID in
 		     ORDER BY trade_date DESC
 		     LIMIT 1
 		 ) ph ON true
+		 LEFT JOIN LATERAL (
+		     SELECT price FROM price_history
+		     WHERE player_season_id = ps.id
+		       AND price IS DISTINCT FROM ph.price
+		     ORDER BY trade_date DESC
+		     LIMIT 1
+		 ) prev ON true
 		 WHERE ps.season_id = $1 AND ps.status NOT IN ('delisted')
 		 ORDER BY ph.market_cap DESC NULLS LAST`,
 		seasonID,
@@ -127,12 +139,26 @@ func (r *PlayerRepository) ListActiveWithPrices(ctx context.Context, seasonID in
 func (r *PlayerRepository) GetLatestPrice(ctx context.Context, playerSeasonID int) (*model.PriceHistory, error) {
 	ph := &model.PriceHistory{}
 	err := r.Pool.QueryRow(ctx,
-		`SELECT id, player_season_id, trade_date, perf_score, age_mult, win_pct_mult,
-		        salary_eff_mult, raw_score, price, market_cap, prev_price, change_pct, created_at
-		 FROM price_history
-		 WHERE player_season_id = $1
-		 ORDER BY trade_date DESC
-		 LIMIT 1`,
+		`WITH latest AS (
+		     SELECT * FROM price_history
+		     WHERE player_season_id = $1
+		     ORDER BY trade_date DESC LIMIT 1
+		 ),
+		 prev_diff AS (
+		     SELECT price FROM price_history
+		     WHERE player_season_id = $1
+		       AND price IS DISTINCT FROM (SELECT price FROM latest)
+		     ORDER BY trade_date DESC LIMIT 1
+		 )
+		 SELECT l.id, l.player_season_id, l.trade_date, l.perf_score, l.age_mult, l.win_pct_mult,
+		        l.salary_eff_mult, l.raw_score, l.price, l.market_cap, l.prev_price,
+		        CASE WHEN pd.price IS NOT NULL AND pd.price > 0
+		             THEN ROUND((l.price - pd.price) / pd.price, 4)
+		             ELSE l.change_pct
+		        END,
+		        l.created_at
+		 FROM latest l
+		 LEFT JOIN LATERAL (SELECT price FROM prev_diff) pd ON true`,
 		playerSeasonID,
 	).Scan(&ph.ID, &ph.PlayerSeasonID, &ph.TradeDate, &ph.PerfScore, &ph.AgeMult, &ph.WinPctMult,
 		&ph.SalaryEffMult, &ph.RawScore, &ph.Price, &ph.MarketCap, &ph.PrevPrice, &ph.ChangePct, &ph.CreatedAt)

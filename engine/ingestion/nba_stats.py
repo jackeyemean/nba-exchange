@@ -15,8 +15,10 @@ import db
 
 log = logging.getLogger(__name__)
 
-TIER_THRESHOLDS = {"superstar": 30, "starter": 24, "rotation": 15}
-FLOAT_SHARES = {"superstar": 20_000_000, "starter": 8_000_000, "rotation": 3_000_000, "bench": 1_000_000}
+FLOAT_SHARES = {
+    "magnificent_7": 10_000_000, "blue_chip": 8_500_000, "growth": 7_000_000,
+    "mid_cap": 5_000_000, "small_cap": 3_000_000, "penny_stock": 500_000,
+}
 
 REQUEST_DELAY = 0.6
 
@@ -47,13 +49,16 @@ def sync_teams(conn, season_label: str):
 
 
 def _classify_tier(avg_minutes: float) -> str:
-    if avg_minutes >= TIER_THRESHOLDS["superstar"]:
-        return "superstar"
-    if avg_minutes >= TIER_THRESHOLDS["starter"]:
-        return "starter"
-    if avg_minutes >= TIER_THRESHOLDS["rotation"]:
-        return "rotation"
-    return "bench"
+    """Fallback tier classification for live sync (backfill uses perf-based ranking)."""
+    if avg_minutes >= 32:
+        return "blue_chip"
+    if avg_minutes >= 26:
+        return "growth"
+    if avg_minutes >= 20:
+        return "mid_cap"
+    if avg_minutes >= 12:
+        return "small_cap"
+    return "penny_stock"
 
 
 def sync_players(conn, season_label: str):
@@ -149,8 +154,21 @@ def _compute_ts_pct(pts: int, fga: int, fta: int) -> float:
     return pts / (2.0 * tsa)
 
 
-def _compute_raw_perf(pts, ast, reb, stl, blk, tov, ts_pct) -> float:
-    return (pts * 2.0) + (ast * 1.5) + (reb * 1.2) + (stl * 2.0) + (blk * 1.5) - (tov * 1.8) + (ts_pct * 20)
+def _compute_raw_perf(pts, fgm, fga, ftm, fta, fg3m, fg3a,
+                      oreb, dreb, ast, stl, blk, tov) -> float:
+    fgmi = fga - fgm
+    ftmi = fta - ftm
+    fg3mi = fg3a - fg3m
+    return (
+        (pts * 1.0)
+        + (fgm * 0.5) + (fgmi * -0.5)
+        + (ftm * 1.0) + (ftmi * -1.0)
+        + (fg3m * 2.0) + (fg3mi * -1.0)
+        + (oreb * 1.5) + (dreb * 1.0)
+        + (ast * 2.0)
+        + (stl * 2.0) + (blk * 2.0)
+        + (tov * -1.0)
+    )
 
 
 def sync_game_stats(conn, season_label: str, game_date: str):
@@ -215,9 +233,16 @@ def sync_game_stats(conn, season_label: str, game_date: str):
             fga = int(row.get("FGA", 0) or 0)
             ftm = int(row.get("FTM", 0) or 0)
             fta = int(row.get("FTA", 0) or 0)
+            fg3m = int(row.get("FG3M", 0) or 0)
+            fg3a = int(row.get("FG3A", 0) or 0)
+            oreb = int(row.get("OREB", 0) or 0)
+            dreb = int(row.get("DREB", 0) or 0)
 
             ts_pct = _compute_ts_pct(pts, fga, fta)
-            raw_perf = _compute_raw_perf(pts, ast, reb, stl, blk, tov, ts_pct)
+            raw_perf = _compute_raw_perf(
+                pts, fgm, fga, ftm, fta, fg3m, fg3a,
+                oreb, dreb, ast, stl, blk, tov,
+            )
 
             db.upsert_game_stat(
                 conn,
@@ -227,6 +252,7 @@ def sync_game_stats(conn, season_label: str, game_date: str):
                 minutes=minutes,
                 pts=pts, ast=ast, reb=reb, stl=stl, blk=blk, tov=tov,
                 fgm=fgm, fga=fga, ftm=ftm, fta=fta,
+                fg3m=fg3m, fg3a=fg3a, oreb=oreb, dreb=dreb,
                 raw_perf_score=raw_perf,
                 ts_pct=ts_pct,
             )

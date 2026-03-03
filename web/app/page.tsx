@@ -15,6 +15,7 @@ export default function DiscoverPage() {
   });
 
   const players = (data?.players || [])
+    .filter((p: any) => p.price != null && p.price > 0)
     .filter((p: any) => {
       if (!search) return true;
       const name = `${p.firstName} ${p.lastName}`.toLowerCase();

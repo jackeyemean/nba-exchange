@@ -5,14 +5,18 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-AGE_BRACKETS = [
-    (18, 22, 1.50),
-    (23, 25, 1.30),
-    (26, 28, 1.10),
-    (29, 31, 1.00),
-    (32, 34, 0.85),
-]
-AGE_DEFAULT_MULT = 0.70
+PRIME_START = 28.0
+PRIME_END = 32.0
+AGING_CAP_AGE = 38.0
+
+YOUTH_PURE_PER_YEAR = 0.007
+YOUTH_PERF_PER_YEAR = 0.015
+AGING_PURE_PER_YEAR = 0.026
+AGING_PERF_PER_YEAR = 0.0217
+
+RAW_PERF_CAP_FOR_AGE = 100.0
+AGE_MULT_FLOOR = 0.70
+AGE_MULT_CEILING = 1.25
 
 SALARY_EFF_BRACKETS = [
     (1.5, 1.20),
@@ -27,20 +31,48 @@ SALARY_EFF_DEFAULT = 0.85
 INJURY_SHOCK = 0.50
 
 
-def calculate_raw_perf(pts: float, ast: float, reb: float, stl: float,
-                       blk: float, tov: float, ts_pct: float) -> float:
-    return (pts * 2.0) + (ast * 1.5) + (reb * 1.2) + (stl * 2.0) + (blk * 1.5) - (tov * 1.8) + (ts_pct * 20)
+def calculate_raw_perf(pts: float, fgm: float, fga: float, ftm: float,
+                       fta: float, fg3m: float, fg3a: float, oreb: float,
+                       dreb: float, ast: float, stl: float, blk: float,
+                       tov: float) -> float:
+    fgmi = fga - fgm
+    ftmi = fta - ftm
+    fg3mi = fg3a - fg3m
+    return (
+        (pts * 1.0)
+        + (fgm * 0.5) + (fgmi * -0.5)
+        + (ftm * 1.0) + (ftmi * -1.0)
+        + (fg3m * 2.0) + (fg3mi * -1.0)
+        + (oreb * 0.5) + (dreb * 0.5)
+        + (ast * 1.5)
+        + (stl * 3.0) + (blk * 3.0)
+        + (tov * -1.0)
+    )
 
 
-def get_age_multiplier(birthdate: date | None) -> float:
+def get_age_multiplier(birthdate: date | None, perf_score: float = 50.0) -> float:
+    """Two-component year-by-year age multiplier.
+
+    Component 1 (pure): fixed boost/tax per year away from prime, always applies.
+    Component 2 (perf-scaled): additional boost/tax scaled by performance.
+    Prime window (28-32): both components are zero.
+    Aging penalty caps at age 38 (38+ treated identically).
+    """
     if birthdate is None:
         return 1.00
     age = (date.today() - birthdate).days / 365.25
-    for low, high, mult in AGE_BRACKETS:
-        if low <= age <= high:
-            return mult
-    if age > 34:
-        return AGE_DEFAULT_MULT
+    norm = min(1.0, max(0.0, perf_score / RAW_PERF_CAP_FOR_AGE))
+
+    if age < PRIME_START:
+        years_below = PRIME_START - age
+        pure = YOUTH_PURE_PER_YEAR * years_below
+        perf_comp = YOUTH_PERF_PER_YEAR * years_below * norm
+        return min(AGE_MULT_CEILING, 1.0 + pure + perf_comp)
+    elif age >= PRIME_END:
+        years_above = min(age, AGING_CAP_AGE) - PRIME_END
+        pure = AGING_PURE_PER_YEAR * years_above
+        perf_comp = AGING_PERF_PER_YEAR * years_above * (1.0 - norm)
+        return max(AGE_MULT_FLOOR, 1.0 - pure - perf_comp)
     return 1.00
 
 
@@ -158,7 +190,7 @@ def calculate_all_prices(conn, season_id: int, trade_date: date, scaling_factor:
     results = []
     for i, pd_ in enumerate(player_data):
         perf_score = float(norm_scores[i])
-        age_mult = get_age_multiplier(pd_["birthdate"])
+        age_mult = get_age_multiplier(pd_["birthdate"], perf_score)
         win_pct = standings.get(pd_["team_id"], 0.5)
         win_pct_mult = get_win_pct_multiplier(win_pct, all_win_pcts)
         sal_pct = salary_map.get(pd_["player_id"], 50.0)

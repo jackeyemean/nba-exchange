@@ -13,7 +13,7 @@ export function Navbar() {
           href="/"
           className="text-lg font-bold tracking-tight text-neutral-900 dark:text-white"
         >
-          PlayerExchange
+          Hoop Exchange
         </Link>
 
         <div className="flex items-center gap-6 text-sm font-medium text-neutral-600 dark:text-neutral-400">

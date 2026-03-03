@@ -8,7 +8,7 @@ import { Navbar } from "@/components/navbar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "PlayerExchange",
+  title: "Hoop Exchange",
   description:
     "A fan simulation stock exchange for basketball players. No real money. Not affiliated with any professional league.",
 };

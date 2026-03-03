@@ -46,10 +46,12 @@ type Player struct {
 type PlayerTier string
 
 const (
-	TierSuperstar PlayerTier = "superstar"
-	TierStarter   PlayerTier = "starter"
-	TierRotation  PlayerTier = "rotation"
-	TierBench     PlayerTier = "bench"
+	TierMagnificent7 PlayerTier = "magnificent_7"
+	TierBlueChip     PlayerTier = "blue_chip"
+	TierGrowth       PlayerTier = "growth"
+	TierMidCap       PlayerTier = "mid_cap"
+	TierSmallCap     PlayerTier = "small_cap"
+	TierPennyStock   PlayerTier = "penny_stock"
 )
 
 type ListingStatus string

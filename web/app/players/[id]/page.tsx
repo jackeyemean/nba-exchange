@@ -80,7 +80,7 @@ export default function PlayerDetailPage() {
                 { label: "Perf Score", value: latestPrice.perfScore?.toFixed(1) },
                 { label: "Age Mult", value: `${latestPrice.ageMult}x` },
                 { label: "Win% Mult", value: `${latestPrice.winPctMult}x` },
-                { label: "Salary Eff", value: `${latestPrice.salaryEffMult}x` },
+                { label: "Injury Mult", value: `${latestPrice.salaryEffMult?.toFixed(3)}x` },
               ].map((stat) => (
                 <div
                   key={stat.label}

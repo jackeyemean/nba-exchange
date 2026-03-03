@@ -13,7 +13,7 @@ export interface PlayerSeason {
   playerId: number;
   seasonId: number;
   teamId: number;
-  tier: "superstar" | "starter" | "rotation" | "bench";
+  tier: "magnificent_7" | "blue_chip" | "growth" | "mid_cap" | "small_cap" | "penny_stock";
   floatShares: number;
   status: "ipo" | "active" | "injured_out" | "delisting" | "delisted";
   player: Player;

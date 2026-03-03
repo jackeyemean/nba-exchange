@@ -45,7 +45,6 @@ CREATE TABLE players (
 );
 
 -- Player-season listing (one stock per player per season)
-CREATE TYPE player_tier AS ENUM ('superstar', 'starter', 'rotation', 'bench');
 CREATE TYPE listing_status AS ENUM ('ipo', 'active', 'injured_out', 'delisting', 'delisted');
 
 CREATE TABLE player_seasons (
@@ -53,8 +52,8 @@ CREATE TABLE player_seasons (
     player_id       INT NOT NULL REFERENCES players(id),
     season_id       INT NOT NULL REFERENCES seasons(id),
     team_id         INT NOT NULL REFERENCES teams(id),
-    tier            player_tier NOT NULL DEFAULT 'bench',
-    float_shares    BIGINT NOT NULL DEFAULT 1000000,
+    tier            TEXT NOT NULL DEFAULT 'penny_stock',
+    float_shares    BIGINT NOT NULL DEFAULT 500000,
     status          listing_status NOT NULL DEFAULT 'active',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (player_id, season_id)
@@ -88,6 +87,10 @@ CREATE TABLE game_stats (
     fga                 INT NOT NULL DEFAULT 0,
     ftm                 INT NOT NULL DEFAULT 0,
     fta                 INT NOT NULL DEFAULT 0,
+    fg3m                INT NOT NULL DEFAULT 0,
+    fg3a                INT NOT NULL DEFAULT 0,
+    oreb                INT NOT NULL DEFAULT 0,
+    dreb                INT NOT NULL DEFAULT 0,
     raw_perf_score      NUMERIC(10,2),
     ts_pct              NUMERIC(5,3),
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),

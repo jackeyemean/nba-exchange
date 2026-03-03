@@ -74,7 +74,7 @@ def upsert_player(conn, external_id: str, first_name: str, last_name: str,
 
 
 def upsert_player_season(conn, player_id: int, season_id: int, team_id: int,
-                          tier: str = "bench", float_shares: int = 1_000_000) -> int:
+                          tier: str = "penny_stock", float_shares: int = 500_000) -> int:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -94,25 +94,29 @@ def upsert_player_season(conn, player_id: int, season_id: int, team_id: int,
 def upsert_game_stat(conn, player_season_id: int, game_date, external_game_id: str,
                       minutes: float, pts: int, ast: int, reb: int, stl: int, blk: int,
                       tov: int, fgm: int, fga: int, ftm: int, fta: int,
-                      raw_perf_score: float, ts_pct: float) -> int:
+                      fg3m: int = 0, fg3a: int = 0, oreb: int = 0, dreb: int = 0,
+                      raw_perf_score: float = 0.0, ts_pct: float = 0.0) -> int:
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO game_stats
                 (player_season_id, game_date, external_game_id, minutes,
                  pts, ast, reb, stl, blk, tov, fgm, fga, ftm, fta,
+                 fg3m, fg3a, oreb, dreb,
                  raw_perf_score, ts_pct)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (player_season_id, external_game_id) DO UPDATE SET
                 minutes = EXCLUDED.minutes,
                 pts = EXCLUDED.pts, ast = EXCLUDED.ast, reb = EXCLUDED.reb,
                 stl = EXCLUDED.stl, blk = EXCLUDED.blk, tov = EXCLUDED.tov,
                 fgm = EXCLUDED.fgm, fga = EXCLUDED.fga, ftm = EXCLUDED.ftm, fta = EXCLUDED.fta,
+                fg3m = EXCLUDED.fg3m, fg3a = EXCLUDED.fg3a, oreb = EXCLUDED.oreb, dreb = EXCLUDED.dreb,
                 raw_perf_score = EXCLUDED.raw_perf_score, ts_pct = EXCLUDED.ts_pct
             RETURNING id
             """,
             (player_season_id, game_date, external_game_id, minutes,
              pts, ast, reb, stl, blk, tov, fgm, fga, ftm, fta,
+             fg3m, fg3a, oreb, dreb,
              raw_perf_score, ts_pct),
         )
         return cur.fetchone()[0]
