@@ -7,7 +7,7 @@ A fan simulation stock exchange where basketball players are tradable assets. Pr
 ## Architecture
 
 ```
-backend/    → Go API server, execution engine, WebSocket hub
+backend/    → Go API server (auth, trading, portfolio, leaderboard)
 engine/     → Python data ingestion, pricing worker, index calculator
 web/        → Next.js frontend with light/dark mode
 migrations/ → PostgreSQL schema
@@ -18,14 +18,13 @@ migrations/ → PostgreSQL schema
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js, TypeScript, Tailwind CSS, Recharts |
-| API / Trading | Go (Gin), PostgreSQL, Redis |
-| WebSocket | Go (gorilla/websocket), Redis Pub/Sub |
+| API / Trading | Go (Gin), PostgreSQL |
 | Ingestion | Python, nba_api, basketball_reference_web_scraper |
 | Pricing | Python (scheduled worker) |
 
 ## Pricing Formula
 
-Prices update at market open (9:30 AM ET) based on the previous day's games.
+Prices update at market open (6:00 AM ET) based on the previous day's games.
 
 ```
 Performance Score = (PTS×2.0) + (AST×1.5) + (REB×1.2) + (STL×2.0) + (BLK×1.5) - (TOV×1.8) + (TS%×20)
@@ -37,7 +36,7 @@ Market Cap  = Price × FloatShares
 
 ## Market Rules
 
-- **Hours:** 9:30 AM – 5:00 PM ET, weekdays only
+- **Hours:** 6:00 AM – 6:00 PM ET, weekdays only
 - **Orders:** Market orders (instant fill at day's price)
 - **Currency:** Virtual only ($100,000 starting balance)
 - **Protections:** Rate limits (100 req/min), abuse guards (30 orders/min per user)
@@ -49,12 +48,12 @@ Market Cap  = Price × FloatShares
 - Go 1.23+
 - Python 3.12+
 - Node.js 20+
-- Docker (for PostgreSQL and Redis)
+- Docker (for PostgreSQL)
 
 ### 1. Start infrastructure
 
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres
 ```
 
 ### 2. Run database migrations
@@ -96,14 +95,7 @@ go mod tidy
 go run cmd/api/main.go
 ```
 
-### 6. Start the WebSocket server
-
-```bash
-cd backend
-go run cmd/ws/main.go
-```
-
-### 7. Start the frontend
+### 6. Start the frontend
 
 ```bash
 cd web
@@ -126,7 +118,6 @@ npm run dev
 | GET | /api/indexes | No | List all indexes |
 | GET | /api/indexes/:id | No | Index detail + constituents |
 | GET | /api/leaderboard | No | Rankings by total value |
-| WS | /ws | No | Real-time price/index stream |
 
 ## Engine CLI
 

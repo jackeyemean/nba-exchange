@@ -1,6 +1,6 @@
 # Engine Structure
 
-The engine is a **Python** data pipeline that ingests NBA stats, computes stock prices, assigns tiers, and manages indexes. It populates PostgreSQL and publishes to Redis for real-time updates.
+The engine is a **Python** data pipeline that ingests NBA stats, computes stock prices, assigns tiers, and manages indexes. It populates PostgreSQL.
 
 **Most important script:** `scripts/restart_simulation.py` – Full market reset. Simulates prior 2 seasons with uniform shares, assigns tiers from ranking, then simulates current season with tier-based shares.
 
@@ -11,7 +11,7 @@ The engine is a **Python** data pipeline that ingests NBA stats, computes stock 
 ```
 engine/
 ├── constants.py                 # ★ Single source of truth for all constants
-├── config.py                    # Env vars, DB/Redis connections
+├── config.py                    # Env vars, DB connection
 ├── utils/
 │   ├── api.py                  # safe_request (rate limit, retry)
 │   └── dates.py                # trading_days_in_range, game_dates_to_ingest
@@ -135,11 +135,11 @@ scripts/restart_simulation: same sync + compute for prior seasons (uniform share
              → indexes.calculator (setup_default_indexes, rebalance_indexes)
                     ↓
 scripts/update_market: sync_game_stats_for_date → sync_standings → compute_prices_for_single_date
-             → db.prices.insert_price_history → Redis publish → rebalance_indexes
+             → db.prices.insert_price_history → rebalance_indexes
                     ↓
-PostgreSQL (price_history, index_history, etc.) + Redis (prices, indexes)
+PostgreSQL (price_history, index_history, etc.)
                     ↓
-Backend API / WebSocket → Frontend
+Backend API → Frontend
 ```
 
 ---
@@ -149,7 +149,6 @@ Backend API / WebSocket → Frontend
 | Variable | Description |
 |----------|-------------|
 | `ENGINE_DATABASE_URL` / `DATABASE_URL` | PostgreSQL URL |
-| `ENGINE_REDIS_URL` / `REDIS_URL` | Redis URL |
 | `SCALING_FACTOR` | Daily price scaling (default 2.08) |
 
 ---
@@ -159,7 +158,7 @@ Backend API / WebSocket → Frontend
 | Module | Role |
 |--------|------|
 | `constants.py` | All shared constants (tiers, float shares, formula params, injury curve, season configs) |
-| `config.py` | Environment variables and DB/Redis connection helpers |
+| `config.py` | Environment variables and DB connection helpers |
 | `utils.api` | safe_request for nba_api (rate limit, retry) |
 | `utils.dates` | trading_days_in_range, game_dates_to_ingest |
 | `db.seasons` | ensure_season, get_season_by_label, ensure_season_with_dates |

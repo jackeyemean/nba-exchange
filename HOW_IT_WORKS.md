@@ -284,7 +284,7 @@ To match the market cap of a player in the tier above you, you need this much hi
 
 ## Market Hours
 
-Prices update at **market open** each weekday. Trading hours: 9:30 AM – 5:00 PM ET. No trading during live games.
+Prices update at **market open** each weekday. Trading hours: 6:00 AM – 6:00 PM ET. No trading during live games.
 
 ---
 

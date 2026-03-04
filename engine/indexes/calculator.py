@@ -1,8 +1,5 @@
-import json
 import logging
 from datetime import date
-
-from config import get_redis
 
 log = logging.getLogger(__name__)
 
@@ -101,7 +98,7 @@ def _get_rookie_external_ids(conn, season_id: int) -> set[str]:
         return set()
 
 
-def rebalance_indexes(conn, season_id: int, trade_date: date, publish_redis: bool = True):
+def rebalance_indexes(conn, season_id: int, trade_date: date):
     log.info("Rebalancing indexes for season %d on %s", season_id, trade_date)
 
     with conn.cursor() as cur:
@@ -209,14 +206,6 @@ def rebalance_indexes(conn, season_id: int, trade_date: date, publish_redis: boo
 
     conn.commit()
     log.info("Rebalanced %d indexes", len(index_results))
-
-    if publish_redis:
-        try:
-            r = get_redis()
-            r.publish("indexes", json.dumps(index_results))
-            log.info("Published index data to Redis")
-        except Exception as e:
-            log.debug("Redis publish skipped (optional for real-time): %s", e)
 
 
 # Cap limits for market-cap-ranked indexes

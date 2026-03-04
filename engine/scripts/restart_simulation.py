@@ -192,7 +192,7 @@ def main():
             )
             trade_dates = [row[0] for row in cur.fetchall()]
         for d in trade_dates:
-            rebalance_indexes(conn, season_id_2526, d, publish_redis=False)
+            rebalance_indexes(conn, season_id_2526, d)
         log.info("Initialized indexes for %d trade dates", len(trade_dates))
 
         log.info("=== Restart Simulation Complete ===")

@@ -1,6 +1,6 @@
 # Backend Structure
 
-The backend is a **Go** API server and WebSocket hub that serves the NBA Exchange frontend. It reads from PostgreSQL and Redis, handles authentication, trading, and real-time price/index streaming.
+The backend is a **Go** REST API server that serves the NBA Exchange frontend. It reads from PostgreSQL, handles authentication, trading, portfolio, leaderboard, and index data.
 
 ---
 
@@ -9,19 +9,16 @@ The backend is a **Go** API server and WebSocket hub that serves the NBA Exchang
 ```
 backend/
 ├── cmd/
-│   ├── api/main.go          # REST API entry point
-│   └── ws/main.go           # WebSocket server entry point
+│   └── api/main.go          # REST API entry point
 ├── internal/
-│   ├── config/config.go     # Environment config (DB, Redis, JWT, market hours)
+│   ├── config/config.go     # Environment config (DB, JWT, market hours)
 │   ├── db/
-│   │   ├── db.go            # PostgreSQL connection pool
-│   │   └── redis.go         # Redis client
+│   │   └── db.go            # PostgreSQL connection pool
 │   ├── model/models.go      # Domain models (Player, Order, Trade, etc.)
 │   ├── handler/             # HTTP request handlers
 │   ├── service/             # Business logic
 │   ├── repository/          # Data access layer
-│   ├── middleware/          # Auth, rate limit, market hours, abuse guard
-│   └── ws/hub.go            # WebSocket hub + Redis pub/sub
+│   └── middleware/          # Auth, rate limit, market hours, abuse guard
 ├── go.mod, go.sum
 └── Dockerfile
 ```
@@ -43,7 +40,6 @@ backend/
 | GET | `/api/indexes` | No | IndexHandler.ListIndexes | List indexes |
 | GET | `/api/indexes/:id` | No | IndexHandler.GetIndex | Index detail + constituents |
 | GET | `/api/leaderboard` | No | LeaderboardHandler.GetLeaderboard | Rankings |
-| WS | `/ws` | No | Hub.HandleWebSocket | Real-time price/index stream |
 
 ---
 
@@ -109,25 +105,15 @@ backend/
 | **RateLimiter** | 100 req/min global |
 | **AbuseGuard** | 30 orders/min per user, max 500k per order |
 | **AuthRequired** | JWT validation for protected routes |
-| **MarketOpen** | 9:30 AM–5:00 PM ET (configurable) |
-
----
-
-## WebSocket Hub
-
-- **Hub** – Manages WebSocket clients, broadcasts messages
-- **Redis subscription** – Subscribes to `prices` and `indexes` channels
-- **Message format** – `{ "channel": "prices" | "indexes", "data": <payload> }`
-- **Port** – 8081 (separate from API on 8080)
+| **MarketOpen** | 6:00 AM–6:00 PM ET (configurable) |
 
 ---
 
 ## Data Flow
 
-1. **Engine** writes prices/indexes to PostgreSQL and publishes to Redis
+1. **Engine** writes prices/indexes to PostgreSQL (daily at market open)
 2. **API** reads from PostgreSQL for REST responses
-3. **WebSocket hub** subscribes to Redis and broadcasts to connected clients
-4. **Frontend** uses REST for initial load, WebSocket for live updates
+3. **Frontend** fetches data via REST; data refreshes on page load or navigation
 
 ---
 
@@ -136,10 +122,8 @@ backend/
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
-| `REDIS_URL` | Redis connection string |
 | `JWT_SECRET` | Secret for JWT signing |
 | `API_PORT` | REST API port (default 8080) |
-| `WS_PORT` | WebSocket port (default 8081) |
 | `STARTING_BALANCE` | New user starting balance |
 | `MARKET_TIMEZONE` | Market timezone (e.g. America/New_York) |
 | `MARKET_OPEN_HOUR`, `MARKET_OPEN_MINUTE` | Market open time |
@@ -155,4 +139,3 @@ For future scaling and readability:
 2. **`internal/domain/`** – Domain logic separated from handlers
 3. **`internal/repository/`** – Keep as-is; consider interfaces for testing
 4. **`internal/middleware/`** – Keep; add logging, request ID middleware
-5. **`internal/ws/`** – Keep; document message contracts

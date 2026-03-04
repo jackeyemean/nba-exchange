@@ -5,7 +5,7 @@ Flow:
   1. Ingest game stats for yesterday (or Fri/Sat/Sun on Monday)
   2. Sync standings
   3. Compute prices for today (same methodology as backfill / restart_simulation)
-  4. Write to price_history, publish to Redis
+  4. Write to price_history
   5. Rebalance indexes
 
 Usage:
@@ -15,7 +15,6 @@ Schedule: Run daily at 8:00 AM ET (e.g. via cron or systemd timer).
 Run from engine/ directory.
 """
 
-import json
 import logging
 import sys
 from datetime import date
@@ -27,7 +26,7 @@ if str(_engine_dir) not in sys.path:
 
 import click
 
-from config import get_db_connection, get_redis
+from config import get_db_connection
 from db.prices import get_prev_prices, insert_price_history
 from db.seasons import get_season_by_label
 from formulas.compute import compute_prices_for_single_date
@@ -106,22 +105,6 @@ def main(season: str):
             )
         conn.commit()
         log.info("Inserted %d price history rows for %s", len(results), trade_date)
-
-        try:
-            r = get_redis()
-            payload = json.dumps([
-                {
-                    "player_season_id": row["player_season_id"],
-                    "price": row["price"],
-                    "change_pct": row["change_pct"],
-                    "market_cap": row["market_cap"],
-                }
-                for row in results
-            ])
-            r.publish("prices", payload)
-            log.info("Published prices to Redis")
-        except Exception as e:
-            log.warning("Redis publish failed (optional): %s", e)
 
         rebalance_indexes(conn, season_id, trade_date)
         conn.commit()

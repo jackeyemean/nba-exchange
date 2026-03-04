@@ -9,7 +9,6 @@ import (
 
 type Config struct {
 	DatabaseURL string
-	RedisURL    string
 	APIPort     string
 	WSPort      string
 	JWTSecret   string
@@ -28,24 +27,23 @@ func Load() (*Config, error) {
 	_ = godotenv.Load("../.env")
 
 	cfg := &Config{
-		DatabaseURL:    envOrDefault("DATABASE_URL", "postgres://nbaexchange:nbaexchange@localhost:5432/nbaexchange?sslmode=disable"),
-		RedisURL:       envOrDefault("REDIS_URL", "redis://localhost:6379/0"),
-		APIPort:        envOrDefault("API_PORT", "8080"),
+		DatabaseURL: envOrDefault("DATABASE_URL", "postgres://nbaexchange:nbaexchange@localhost:5432/nbaexchange?sslmode=disable"),
+		APIPort:     envOrDefault("API_PORT", "8080"),
 		WSPort:         envOrDefault("WS_PORT", "8081"),
 		JWTSecret:      envOrDefault("JWT_SECRET", "change-me-in-production"),
 		MarketTimezone: envOrDefault("MARKET_TIMEZONE", "America/New_York"),
 	}
 
 	var err error
-	cfg.MarketOpenHour, err = envIntOrDefault("MARKET_OPEN_HOUR", 9)
+	cfg.MarketOpenHour, err = envIntOrDefault("MARKET_OPEN_HOUR", 6)
 	if err != nil {
 		return nil, err
 	}
-	cfg.MarketOpenMinute, err = envIntOrDefault("MARKET_OPEN_MINUTE", 30)
+	cfg.MarketOpenMinute, err = envIntOrDefault("MARKET_OPEN_MINUTE", 0)
 	if err != nil {
 		return nil, err
 	}
-	cfg.MarketCloseHour, err = envIntOrDefault("MARKET_CLOSE_HOUR", 17)
+	cfg.MarketCloseHour, err = envIntOrDefault("MARKET_CLOSE_HOUR", 18)
 	if err != nil {
 		return nil, err
 	}

@@ -33,13 +33,6 @@ func main() {
 	}
 	defer pool.Close()
 
-	rdb, err := db.NewRedis(cfg.RedisURL)
-	if err != nil {
-		log.Printf("WARNING: Redis not available: %v (continuing without it)", err)
-	} else {
-		defer rdb.Close()
-	}
-
 	userRepo := repository.NewUserRepository(pool)
 	walletRepo := repository.NewWalletRepository(pool)
 	playerRepo := repository.NewPlayerRepository(pool)
