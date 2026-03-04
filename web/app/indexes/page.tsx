@@ -4,6 +4,41 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
 
+const TEAM_NAME_TO_ABBREV: Record<string, string> = {
+  "Atlanta Hawks": "ATL", "Boston Celtics": "BOS", "Brooklyn Nets": "BKN",
+  "Charlotte Hornets": "CHA", "Chicago Bulls": "CHI", "Cleveland Cavaliers": "CLE",
+  "Dallas Mavericks": "DAL", "Denver Nuggets": "DEN", "Detroit Pistons": "DET",
+  "Golden State Warriors": "GSW", "Houston Rockets": "HOU", "Indiana Pacers": "IND",
+  "Los Angeles Clippers": "LAC", "Los Angeles Lakers": "LAL", "Memphis Grizzlies": "MEM",
+  "Miami Heat": "MIA", "Milwaukee Bucks": "MIL", "Minnesota Timberwolves": "MIN",
+  "New Orleans Pelicans": "NOP", "New York Knicks": "NYK", "Oklahoma City Thunder": "OKC",
+  "Orlando Magic": "ORL", "Philadelphia 76ers": "PHI", "Phoenix Suns": "PHX",
+  "Portland Trail Blazers": "POR", "Sacramento Kings": "SAC", "San Antonio Spurs": "SAS",
+  "Toronto Raptors": "TOR", "Utah Jazz": "UTA", "Washington Wizards": "WAS",
+};
+
+function getIndexTicker(idx: { indexType?: string; index_type?: string; name?: string; teamAbbreviation?: string; team_abbreviation?: string }): string {
+  const type = idx.indexType || idx.index_type || "";
+  if (type === "team") {
+    const abbrev = idx.teamAbbreviation ?? idx.team_abbreviation;
+    if (abbrev) return abbrev;
+    const display = displayName(idx.name || "");
+    return TEAM_NAME_TO_ABBREV[display] || "—";
+  }
+  if (type === "position") {
+    const name = (idx.name || "").toLowerCase();
+    if (name.includes("guard")) return "GUARD";
+    if (name.includes("wing")) return "WINGS";
+    if (name.includes("big")) return "BIGS";
+  }
+  if (type === "league") return "NBA";
+  return "—";
+}
+
+function displayName(name: string): string {
+  return name.replace(/\s+Index$/i, "");
+}
+
 export default function IndexesPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["indexes"],
@@ -11,12 +46,11 @@ export default function IndexesPage() {
   });
 
   const indexes = data?.indexes || [];
-  const typeOrder = ["league", "team", "position", "momentum"];
+  const typeOrder = ["league", "team", "position"];
   const grouped = {
     league: indexes.filter((i: any) => (i.indexType || i.index_type) === "league"),
     team: indexes.filter((i: any) => (i.indexType || i.index_type) === "team"),
     position: indexes.filter((i: any) => (i.indexType || i.index_type) === "position"),
-    momentum: indexes.filter((i: any) => (i.indexType || i.index_type) === "momentum"),
   };
   const hasGrouped = Object.values(grouped).some((arr) => arr.length > 0);
 
@@ -55,7 +89,7 @@ export default function IndexesPage() {
             if (items.length === 0) return null;
             return (
               <div key={type} className="mb-8">
-                <h2 className="mb-3 text-lg font-semibold capitalize">{type} Indexes</h2>
+                <h2 className="mb-3 text-lg font-semibold capitalize">{type}</h2>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {items.map((idx: any) => (
                     <Link
@@ -63,8 +97,13 @@ export default function IndexesPage() {
                       href={`/indexes/${idx.id}`}
                       className="rounded-lg border border-neutral-200 p-4 transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
                     >
-                      <div className="font-medium text-neutral-900 dark:text-white">
-                        {idx.name}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-neutral-900 dark:text-white">
+                          {displayName(idx.name)}
+                        </span>
+                        <span className="shrink-0 font-mono text-xs text-neutral-500">
+                          {getIndexTicker(idx)}
+                        </span>
                       </div>
                       {idx.description && (
                         <div className="mt-1 text-xs text-neutral-500">
@@ -88,8 +127,13 @@ export default function IndexesPage() {
               href={`/indexes/${idx.id}`}
               className="rounded-lg border border-neutral-200 p-4 transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900"
             >
-              <div className="font-medium text-neutral-900 dark:text-white">
-                {idx.name}
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-neutral-900 dark:text-white">
+                  {displayName(idx.name)}
+                </span>
+                <span className="shrink-0 font-mono text-xs text-neutral-500">
+                  {getIndexTicker(idx)}
+                </span>
               </div>
               {idx.description && (
                 <div className="mt-1 text-xs text-neutral-500">

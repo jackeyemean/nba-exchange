@@ -1,0 +1,3 @@
+ALTER TABLE index_history
+  ALTER COLUMN level TYPE NUMERIC(12,4),
+  ALTER COLUMN prev_level TYPE NUMERIC(12,4);

@@ -6,8 +6,6 @@ from config import get_redis
 
 log = logging.getLogger(__name__)
 
-MAX_CONSTITUENT_WEIGHT = 0.12
-
 POSITION_GROUPS = {
     "Guards": ["Guard", "G", "PG", "SG", "G-F"],
     "Wings": ["Forward", "F", "SF", "F-G", "F-C", "GF"],
@@ -32,8 +30,18 @@ def setup_default_indexes(conn, season_id: int):
         _upsert_index(conn, f"{group_name} Index", "position",
                        f"Cap-weighted index for {group_name.lower()}")
 
-    _upsert_index(conn, "Momentum Index", "momentum",
-                   "Top performers by recent price change")
+    # Remove momentum index if it exists (causes level overflow from extreme returns)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM indexes WHERE index_type = 'momentum'"
+        )
+        momentum_ids = [row[0] for row in cur.fetchall()]
+        for idx_id in momentum_ids:
+            cur.execute("DELETE FROM index_constituents WHERE index_id = %s", (idx_id,))
+            cur.execute("DELETE FROM index_history WHERE index_id = %s", (idx_id,))
+            cur.execute("DELETE FROM indexes WHERE id = %s", (idx_id,))
+        if momentum_ids:
+            log.info("Removed %d momentum index(es)", len(momentum_ids))
 
     conn.commit()
     log.info("Default indexes created")
@@ -45,7 +53,9 @@ def _upsert_index(conn, name: str, index_type: str, description: str, team_id: i
             """
             INSERT INTO indexes (name, index_type, description, team_id)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description
+            ON CONFLICT (name) DO UPDATE SET
+                description = EXCLUDED.description,
+                team_id = COALESCE(EXCLUDED.team_id, indexes.team_id)
             RETURNING id
             """,
             (name, index_type, description, team_id),
@@ -54,32 +64,14 @@ def _upsert_index(conn, name: str, index_type: str, description: str, team_id: i
 
 
 def _cap_weights(raw_weights: dict[int, float]) -> dict[int, float]:
-    """Apply iterative capping at MAX_CONSTITUENT_WEIGHT."""
-    weights = dict(raw_weights)
-    for _ in range(20):
-        total = sum(weights.values())
-        if total == 0:
-            return weights
-        normed = {k: v / total for k, v in weights.items()}
-        excess = {k: v for k, v in normed.items() if v > MAX_CONSTITUENT_WEIGHT}
-        if not excess:
-            return normed
-        capped_total = MAX_CONSTITUENT_WEIGHT * len(excess)
-        remaining_keys = [k for k in normed if k not in excess]
-        remaining_total = sum(normed[k] for k in remaining_keys)
-        if remaining_total == 0:
-            return normed
-        scale = (1.0 - capped_total) / remaining_total
-        weights = {}
-        for k in excess:
-            weights[k] = MAX_CONSTITUENT_WEIGHT
-        for k in remaining_keys:
-            weights[k] = normed[k] * scale
-    total = sum(weights.values())
-    return {k: v / total for k, v in weights.items()} if total > 0 else weights
+    """Compute cap-weighted weights (no max cap)."""
+    total = sum(raw_weights.values())
+    if total == 0:
+        return raw_weights
+    return {k: v / total for k, v in raw_weights.items()}
 
 
-def rebalance_indexes(conn, season_id: int, trade_date: date):
+def rebalance_indexes(conn, season_id: int, trade_date: date, publish_redis: bool = True):
     log.info("Rebalancing indexes for season %d on %s", season_id, trade_date)
 
     with conn.cursor() as cur:
@@ -146,6 +138,11 @@ def rebalance_indexes(conn, season_id: int, trade_date: date):
         prev_level = prev_levels.get(idx_id, 1000.0)
         level = prev_level * (1.0 + weighted_return)
 
+        # Cap level to prevent NUMERIC(12,4) overflow (max < 10^8)
+        MAX_LEVEL = 99_999_999.99
+        level = min(max(level, 0.0001), MAX_LEVEL)
+        prev_level = min(max(prev_level, 0.0001), MAX_LEVEL)
+
         change_pct = (level - prev_level) / prev_level if prev_level > 0 else None
 
         with conn.cursor() as cur:
@@ -169,12 +166,13 @@ def rebalance_indexes(conn, season_id: int, trade_date: date):
     conn.commit()
     log.info("Rebalanced %d indexes", len(index_results))
 
-    try:
-        r = get_redis()
-        r.publish("indexes", json.dumps(index_results))
-        log.info("Published index data to Redis")
-    except Exception:
-        log.exception("Failed to publish index data to Redis")
+    if publish_redis:
+        try:
+            r = get_redis()
+            r.publish("indexes", json.dumps(index_results))
+            log.info("Published index data to Redis")
+        except Exception as e:
+            log.debug("Redis publish skipped (optional for real-time): %s", e)
 
 
 def _select_constituents(all_prices: dict, idx_type: str, team_id: int | None,
@@ -196,11 +194,6 @@ def _select_constituents(all_prices: dict, idx_type: str, team_id: int | None,
             return []
         valid_positions = POSITION_GROUPS[target_group]
         return [ps_id for ps_id, info in all_prices.items() if info["position"] in valid_positions]
-
-    if idx_type == "momentum":
-        sorted_by_change = sorted(all_prices.items(), key=lambda x: x[1]["change_pct"], reverse=True)
-        top_n = max(1, len(sorted_by_change) // 10)
-        return [ps_id for ps_id, _ in sorted_by_change[:top_n]]
 
     return []
 

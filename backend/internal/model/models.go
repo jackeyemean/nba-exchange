@@ -199,12 +199,13 @@ const (
 )
 
 type Index struct {
-	ID          int       `json:"id"`
-	Name        string    `json:"name"`
-	IndexType   IndexType `json:"indexType"`
-	Description string    `json:"description,omitempty"`
-	TeamID      *int      `json:"teamId,omitempty"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID                 int       `json:"id"`
+	Name               string    `json:"name"`
+	IndexType          IndexType `json:"indexType"`
+	Description        string    `json:"description,omitempty"`
+	TeamID             *int      `json:"teamId,omitempty"`
+	TeamAbbreviation   *string   `json:"teamAbbreviation,omitempty"`
+	CreatedAt          time.Time `json:"createdAt"`
 }
 
 type IndexConstituent struct {

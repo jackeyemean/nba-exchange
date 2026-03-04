@@ -33,9 +33,19 @@ func (h *IndexHandler) GetIndex(c *gin.Context) {
 		return
 	}
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "30"))
-	if limit <= 0 || limit > 365 {
-		limit = 30
+	rangeParam := c.DefaultQuery("range", "season")
+	limit := 80
+	switch rangeParam {
+	case "all":
+		limit = 365
+	case "season":
+		limit = 80
+	case "month":
+		limit = 22
+	case "week":
+		limit = 5
+	case "day":
+		limit = 2
 	}
 
 	index, err := h.Indexes.GetByID(c.Request.Context(), id)

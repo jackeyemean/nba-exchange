@@ -98,9 +98,10 @@ class ApiClient {
     return this.request<{ indexes: any[] }>("/api/indexes");
   }
 
-  getIndex(id: number) {
+  getIndex(id: number, range?: "all" | "season" | "month" | "week" | "day") {
+    const params = range ? `?range=${range}` : "";
     return this.request<{ index: any; constituents: any[]; history: any[] }>(
-      `/api/indexes/${id}`
+      `/api/indexes/${id}${params}`
     );
   }
 

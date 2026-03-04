@@ -1,22 +1,19 @@
-import logging
 from datetime import date
 
 import numpy as np
 
-log = logging.getLogger(__name__)
+PRIME_START = 30.0
+PRIME_END = 30.0
+AGING_CAP_AGE = 40.0
 
-PRIME_START = 28.0
-PRIME_END = 32.0
-AGING_CAP_AGE = 38.0
-
-YOUTH_PURE_PER_YEAR = 0.007
-YOUTH_PERF_PER_YEAR = 0.055   # Elite young players (Flagg, Wemby, etc.) reach 1.4x ceiling
-AGING_PURE_PER_YEAR = 0.026
-AGING_PERF_PER_YEAR = 0.040   # More aggressive: low-perf older players get bigger tax
+YOUTH_PURE_PER_YEAR = 0.01
+YOUTH_PERF_PER_YEAR = 0.10
+AGING_PURE_PER_YEAR = 0.01
+AGING_PERF_PER_YEAR = 0.10
 
 RAW_PERF_CAP_FOR_AGE = 100.0
-AGE_MULT_FLOOR = 0.70
-AGE_MULT_CEILING = 1.40  # Young high performers can get up to 1.40x boost
+AGE_MULT_FLOOR = 0.50
+AGE_MULT_CEILING = 2.00
 
 INJURY_SHOCK = 0.50
 
@@ -36,7 +33,7 @@ def calculate_raw_perf(pts: float, fgm: float, fga: float, ftm: float,
         + (oreb * 1.0) + (dreb * 1.0)
         + (ast * 2.0)
         + (stl * 4.0) + (blk * 4.0)
-        + (tov * -2)
+        + (tov * -2.0)
     )
 
 

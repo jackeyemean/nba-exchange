@@ -28,7 +28,7 @@ Every player is a stock. You buy and sell shares at the current **share price**.
 2. **Power-law scaling** — A score of 80 is worth far more than 2× a score of 40. The exponent (1.5) creates a steep curve: small stat improvements at the top move the price a lot.
 3. **Recent performance** — The last 10 games are weighted 25% vs. 75% season average. Hot/cold streaks move the needle.
 4. **Prior-season blend** — For the first 10 games, prior-year performance is blended in. Players who haven't played yet start at 100% prior-year value.
-5. **Age multiplier** — Young high performers get a boost (up to 1.40×); older low performers get a tax (down to 0.70×). Prime (28–32) = 1.00×.
+5. **Age multiplier** — Young high performers get a boost (up to 1.50×); older low performers get a tax (down to 0.70×). Prime (28–32) = 1.00×.
 6. **Team win%** — Linear by league rank: best team 1.10×, worst team 0.95× (capped +10% / −5%).
 7. **Injury/availability** — Consecutive missed games reduce the multiplier (down to 0.70× at 30+ games missed).
 
@@ -84,19 +84,19 @@ base_price = (0.49 ^ 1.5) × $275 ≈ 0.343 × 275 ≈ $94.33
 ### Step 4: Multipliers
 
 - **Age:** 21 years old, 7 years below prime. Elite performer (top of league that day) → norm = 1.0.
-  - Pure: +0.7% × 7 = 4.9%
-  - Perf-scaled: +5.5% × 7 × 1.0 = 38.5%
-  - age_mult = 1.0 + 0.049 + 0.385 = 1.434 → **capped at 1.40×**
+  - Pure: +0.81% × 7 = 5.7%
+  - Perf-scaled: +6.34% × 7 × 1.0 = 44.4%
+  - age_mult = 1.0 + 0.057 + 0.444 = 1.50 → **capped at 1.50×**
 - **Team win%:** Spurs at 45% → rank ~25 of 30 → **~0.97×** (linear 0.95–1.10)
 - **Injury:** 0 missed → **1.00×**
 
 ### Step 5: Final price
 
 ```
-share_price = $94.33 × 1.40 × 0.97 × 1.00 ≈ $128.10
+share_price = $94.33 × 1.50 × 0.97 × 1.00 ≈ $137.25
 ```
 
-If Wemby is Mag 7 (10M float): market_cap = $128.10 × 10,000,000 = **~$1.28B**.
+If Wemby is Mag 7 (10M float): market_cap = $137.25 × 10,000,000 = **~$1.37B**.
 
 ### Methodology assessment
 
@@ -105,7 +105,7 @@ If Wemby is Mag 7 (10M float): market_cap = $128.10 × 10,000,000 = **~$1.28B**.
 | **Raw score** | ESPN-aligned weights give familiar fantasy-like values and reward efficiency (miss penalties) and defense (steals/blocks). |
 | **Blending** | 75/25 season vs last 10 games balances stability with hot/cold streaks. Prior-year blend for early season avoids noisy starts. |
 | **Power curve** | Exponent 1.5 makes small stat gains at the top matter more than at the bottom, matching how fans value stars. |
-| **Age multiplier** | Young elite players reach 1.4×; older low performers drop toward 0.7×. Prime (28–32) is neutral. |
+| **Age multiplier** | Young elite players reach 1.5×; older low performers drop toward 0.7×. Prime (28–32) is neutral. |
 | **Win%** | Linear 0.95×–1.10× by league rank; capped ±10% / −5% so team context stays modest. |
 | **Injury** | Quadratic ramp down to 0.70× over 30 missed games models increasing uncertainty. |
 
@@ -173,16 +173,16 @@ The exponent makes the curve steep: going from 50→55 has a bigger dollar impac
 
 ## Multipliers (Applied to Base Price)
 
-### Age Multiplier (0.70× — 1.40×)
+### Age Multiplier (0.70× — 1.50×)
 
 - **Prime (28–32):** 1.00× — no change
 - **Younger than 28:** Boost. Two parts:
-  - **Pure:** +0.7% per year below prime
-  - **Performance-scaled:** +5.5% per year × (perf/100). Elite young players (Flagg, Wemby, etc.) reach the 1.40× ceiling; bench players get a smaller boost.
+  - **Pure:** +0.81% per year below prime
+  - **Performance-scaled:** +6.34% per year × (perf/100). Elite young players (Flagg, Wemby, etc.) reach the 1.50× ceiling; bench players get a smaller boost.
 - **Older than 32:** Tax. Two parts:
   - **Pure:** −2.6% per year above prime
   - **Performance-scaled:** −4.0% per year × (1 − perf/100). A 35-year-old struggling gets a bigger tax than a 35-year-old still performing.
-- **Cap:** Age 38+ treated as 38. Floor 0.70×, ceiling **1.40×** for young high performers.
+- **Cap:** Age 38+ treated as 38. Floor 0.70×, ceiling **1.50×** for young high performers.
 
 ### Team Win% Multiplier (0.90× — 1.15×)
 

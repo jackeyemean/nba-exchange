@@ -91,6 +91,20 @@ def upsert_player_season(conn, player_id: int, season_id: int, team_id: int,
         return cur.fetchone()[0]
 
 
+def update_player_season_team_only(conn, player_id: int, season_id: int, team_id: int) -> bool:
+    """Update only team_id for existing player_season. Preserves tier/float_shares. Returns True if updated."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE player_seasons SET team_id = %s
+            WHERE player_id = %s AND season_id = %s
+            RETURNING id
+            """,
+            (team_id, player_id, season_id),
+        )
+        return cur.fetchone() is not None
+
+
 def upsert_game_stat(conn, player_season_id: int, game_date, external_game_id: str,
                       minutes: float, pts: int, ast: int, reb: int, stl: int, blk: int,
                       tov: int, fgm: int, fga: int, ftm: int, fta: int,

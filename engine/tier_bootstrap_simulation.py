@@ -20,6 +20,7 @@ from datetime import date
 import click
 
 from config import get_db_connection
+from indexes.calculator import setup_default_indexes, rebalance_indexes
 from backfill import (
     backfill_teams,
     backfill_players_and_stats,
@@ -310,6 +311,24 @@ def main():
                 (season_id_2526,),
             )
         conn.commit()
+
+        # --- Phase 5: Initialize indexes (constituents + history) ---
+        log.info("--- Phase 5: Initialize indexes for 2025-26 ---")
+        setup_default_indexes(conn, season_id_2526)
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ph.trade_date FROM price_history ph
+                JOIN player_seasons ps ON ph.player_season_id = ps.id
+                WHERE ps.season_id = %s
+                ORDER BY ph.trade_date
+                """,
+                (season_id_2526,),
+            )
+            trade_dates = [row[0] for row in cur.fetchall()]
+        for d in trade_dates:
+            rebalance_indexes(conn, season_id_2526, d, publish_redis=False)
+        log.info("Initialized indexes for %d trade dates", len(trade_dates))
 
         log.info("=== Tier Bootstrap Simulation Complete ===")
     except Exception:

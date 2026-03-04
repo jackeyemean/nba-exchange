@@ -51,17 +51,6 @@ def sync_teams(conn, season_label: str):
     log.info("Synced %d teams", len(all_teams))
 
 
-def _classify_tier(avg_minutes: float) -> str:
-    """Fallback tier classification for live sync (backfill uses perf-based ranking)."""
-    if avg_minutes >= 32:
-        return "blue_chip"
-    if avg_minutes >= 26:
-        return "growth"
-    if avg_minutes >= 20:
-        return "mid_cap"
-    return "penny_stock"
-
-
 def sync_players(conn, season_label: str):
     log.info("Syncing players for season %s", season_label)
     season = db.get_season_by_label(conn, season_label)
@@ -94,23 +83,26 @@ def sync_players(conn, season_label: str):
 
         team_id = team_row[0]
 
+        # Preserve existing tier/float_shares (from tier-bootstrap). Only update team_id for roster changes.
+        # New players get penny_stock until tier-bootstrap assigns proper tiers.
         with conn.cursor() as cur:
             cur.execute(
-                """
-                SELECT COALESCE(AVG(minutes), 0)
-                FROM game_stats gs
-                JOIN player_seasons ps ON gs.player_season_id = ps.id
-                WHERE ps.player_id = %s AND ps.season_id = %s
-                """,
+                "SELECT id FROM player_seasons WHERE player_id = %s AND season_id = %s",
                 (player_id, season["id"]),
             )
-            avg_min = float(cur.fetchone()[0])
+            existing = cur.fetchone()
 
-        tier = _classify_tier(avg_min)
-        float_shares = FLOAT_SHARES[tier]
-
-        db.upsert_player_season(conn, player_id=player_id, season_id=season["id"],
-                                team_id=team_id, tier=tier, float_shares=float_shares)
+        if existing:
+            db.update_player_season_team_only(conn, player_id, season["id"], team_id)
+        else:
+            db.upsert_player_season(
+                conn,
+                player_id=player_id,
+                season_id=season["id"],
+                team_id=team_id,
+                tier="penny_stock",
+                float_shares=FLOAT_SHARES["penny_stock"],
+            )
         count += 1
 
     conn.commit()

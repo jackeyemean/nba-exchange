@@ -77,8 +77,13 @@ cp .env.example .env
 cd engine
 pip install -r requirements.txt
 python main.py sync-all --season 2025-26
+python main.py tier-bootstrap   # Assigns tiers from prior-season ranking, computes prices, initializes indexes
+# Or if you skip tier-bootstrap and use sync-all only:
 python main.py price --season 2025-26
+python main.py rebalance --season 2025-26
 ```
+
+**Recommended:** Run `tier-bootstrap` after sync-all. It assigns performance-based tiers (from prior-season ranking), computes historical prices, and initializes indexes. Tiers are **never** overwritten by sync-all—`sync_players` preserves existing tiers and only updates team/roster.
 
 ### 5. Start the Go API
 
@@ -123,13 +128,18 @@ npm run dev
 ## Engine CLI
 
 ```bash
-python main.py sync-all --season 2025-26     # Full data sync
+python main.py sync-all --season 2025-26     # Full data sync (teams, players, standings, index definitions)
+python main.py tier-bootstrap                # Tiers from prior-season ranking + prices + index init
 python main.py sync-standings --season 2025-26  # Standings only (for daily schedule)
 python main.py ingest --season 2025-26 --date 2025-12-01  # Single date
-python main.py price --season 2025-26         # Run pricing
-python main.py rebalance --season 2025-26     # Rebalance indexes
+python main.py price --season 2025-26         # Run pricing (updates player prices)
+python main.py rebalance --season 2025-26     # Rebalance indexes (constituents + history for today)
 python main.py schedule --season 2025-26      # Daily scheduler (8am ET)
 ```
+
+**Indexes:** `sync-all` creates index definitions. `tier-bootstrap` populates constituents and history from price data. The daily `schedule` runs `price` then `rebalance` to keep indexes in sync with the market.
+
+**Tiers:** Only `tier-bootstrap` assigns tiers (performance-based from prior-season ranking). `sync_players` never overwrites tiers—it preserves existing tier/float_shares and only updates team_id for roster changes. New players get `penny_stock` until the next tier-bootstrap.
 
 ## Market Automation
 

@@ -37,21 +37,19 @@ TIER_RANKS = [
 ]
 TIER_DEFAULT = "penny_stock"
 
-# Tier premiums: penny->mid 2x, all other jumps 1.25x
-# Shares chosen so: mid=2*penny, growth=1.25*mid, blue=1.25*growth, mag7=1.25*blue
 FLOAT_SHARES = {
-    "magnificent_7": 10_000_000,
-    "blue_chip": 8_000_000,   # mag7/1.25
-    "growth": 6_400_000,      # blue/1.25
-    "mid_cap": 5_120_000,     # growth/1.25
-    "penny_stock": 2_560_000, # mid/2
+    "magnificent_7": 12_000_000,
+    "blue_chip": 8_000_000, # 50% premium to mag7
+    "growth": 6_000_000, # 33% premium to blue_chip
+    "mid_cap": 5_000_000, # 20% premium to growth   
+    "penny_stock": 3_000_000, # 66% premium to mid_cap
 }
 
-INJURY_FREEZE_GAMES = 30
-INJURY_MAX_TOTAL = 0.30
+INJURY_FREEZE_GAMES = 35
+INJURY_MAX_TOTAL = 0.35
 
 PRICE_CEILING = 275.0
-PRICE_EXPONENT = 1.5
+PRICE_EXPONENT = 2.5
 
 SEASON_START = date(2025, 10, 22)
 
@@ -835,7 +833,7 @@ def compute_historical_prices(
             normalized = perf_score / 100.0  # No cap — elite performers can exceed $275 base
             base_price = (normalized ** PRICE_EXPONENT) * PRICE_CEILING
 
-            # Normalize perf for age mult so top performer that day gets 1.0 (reaches 1.4x ceiling)
+            # Normalize perf for age mult so top performer that day gets 1.0 (reaches 1.5x ceiling)
             age_perf_score = min(100.0, blended_raw / age_perf_scale * 100.0)
             age_mult = get_age_multiplier(birthdate, age_perf_score)
 

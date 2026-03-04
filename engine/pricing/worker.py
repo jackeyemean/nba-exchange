@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import date, timedelta
 
-from config import get_redis, SCALING_FACTOR
+from config import get_redis
 import db
 from pricing.formula import calculate_all_prices
 
@@ -24,7 +24,7 @@ def run_daily_pricing(conn, season_id: int, trade_date: date | None = None):
     log.info("Running daily pricing for season %d, trade_date=%s, game_dates=%s",
              season_id, trade_date, game_dates)
 
-    results = calculate_all_prices(conn, season_id, trade_date, SCALING_FACTOR)
+    results = calculate_all_prices(conn, season_id, trade_date)
 
     if not results:
         log.warning("No price results generated")
