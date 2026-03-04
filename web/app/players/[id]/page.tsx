@@ -14,7 +14,7 @@ type PriceRange = "all" | "season" | "month" | "week" | "day";
 export default function PlayerDetailPage() {
   const params = useParams();
   const id = Number(params.id);
-  const [range, setRange] = useState<PriceRange>("day");
+  const [range, setRange] = useState<PriceRange>("season");
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["player", id, range],
