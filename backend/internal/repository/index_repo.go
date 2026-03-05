@@ -220,6 +220,21 @@ func (r *IndexRepository) GetConstituentsWithDetails(ctx context.Context, indexI
 	return results, rows.Err()
 }
 
+// GetLatestLevel returns the most recent index level (price) for trading.
+func (r *IndexRepository) GetLatestLevel(ctx context.Context, indexID int) (float64, error) {
+	var level float64
+	err := r.Pool.QueryRow(ctx,
+		`SELECT level FROM index_history
+		 WHERE index_id = $1
+		 ORDER BY trade_date DESC LIMIT 1`,
+		indexID,
+	).Scan(&level)
+	if err != nil {
+		return 0, fmt.Errorf("get latest level: %w", err)
+	}
+	return level, nil
+}
+
 func (r *IndexRepository) GetHistory(ctx context.Context, indexID int, limit int, offset int) ([]model.IndexHistory, error) {
 	rows, err := r.Pool.Query(ctx,
 		`SELECT id, index_id, trade_date, level, prev_level, change_pct, created_at

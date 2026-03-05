@@ -176,7 +176,8 @@ export default function PortfolioPage() {
       {/* Positions */}
       <section className="mb-12">
         <h2 className="mb-4 text-lg font-semibold">Your Positions</h2>
-        {(!portfolio?.positions || portfolio.positions.length === 0) ? (
+        {(!portfolio?.positions || portfolio.positions.length === 0) &&
+        (!portfolio?.indexPositions || portfolio.indexPositions.length === 0) ? (
           <div className="rounded-xl border border-neutral-200 py-16 text-center dark:border-neutral-800">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800">
               <svg
@@ -208,9 +209,9 @@ export default function PortfolioPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {portfolio.positions.map((pos: any) => (
+            {portfolio.positions?.map((pos: any) => (
               <Link
-                key={pos.playerSeasonId}
+                key={`player-${pos.playerSeasonId}`}
                 href={`/players/${pos.playerSeasonId}`}
                 className="block rounded-xl border border-neutral-200 bg-white p-4 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50 dark:hover:border-neutral-700 dark:hover:bg-neutral-900"
               >
@@ -218,6 +219,46 @@ export default function PortfolioPage() {
                   <div>
                     <p className="font-semibold">
                       {pos.player?.firstName} {pos.player?.lastName}
+                    </p>
+                    <p className="text-sm text-neutral-500">
+                      {pos.quantity} shares · Avg {formatCurrency(pos.avgCost)}
+                    </p>
+                  </div>
+                  <div className="flex items-baseline gap-6 text-right">
+                    <div>
+                      <p className="text-xs text-neutral-500">Value</p>
+                      <p className="font-mono">
+                        {formatCurrency(pos.marketValue)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-neutral-500">P&L</p>
+                      <p
+                        className={`font-mono ${pctColor(pos.unrealizedPnlPct)}`}
+                      >
+                        {formatCurrency(pos.unrealizedPnl)} (
+                        {formatPct(pos.unrealizedPnlPct)})
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+            {portfolio.indexPositions?.map((pos: any) => (
+              <Link
+                key={`index-${pos.indexId}`}
+                href={`/indexes/${pos.indexId}`}
+                className="block rounded-xl border border-neutral-200 bg-white p-4 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50 dark:hover:border-neutral-700 dark:hover:bg-neutral-900"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <p className="font-semibold">
+                      {pos.index?.name}
+                      {pos.index?.ticker && (
+                        <span className="ml-2 font-mono text-sm text-neutral-500">
+                          ({pos.index.ticker})
+                        </span>
+                      )}
                     </p>
                     <p className="text-sm text-neutral-500">
                       {pos.quantity} shares · Avg {formatCurrency(pos.avgCost)}
@@ -274,7 +315,9 @@ export default function PortfolioPage() {
                     </span>
                     <div>
                       <p className="font-medium">
-                        {t.player?.firstName} {t.player?.lastName}
+                        {t.player
+                          ? `${t.player.firstName} ${t.player.lastName}`
+                          : t.index?.name ?? "—"}
                       </p>
                       <p className="text-xs text-neutral-500">
                         {new Date(t.executedAt).toLocaleDateString(undefined, {

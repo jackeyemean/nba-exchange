@@ -12,6 +12,8 @@ func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
 	}
+	// Use UTC for consistent timestamp handling (PostgreSQL returns in session TZ)
+	config.ConnConfig.RuntimeParams["timezone"] = "UTC"
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {

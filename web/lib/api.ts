@@ -77,6 +77,17 @@ class ApiClient {
     });
   }
 
+  placeIndexOrder(indexId: number, side: "buy" | "sell", quantity: number) {
+    return this.request<{ trade: any }>("/api/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        index_id: indexId,
+        side,
+        quantity,
+      }),
+    });
+  }
+
   // Portfolio
   getPortfolio() {
     return this.request<any>("/api/portfolio");

@@ -158,7 +158,8 @@ const (
 type Order struct {
 	ID              uuid.UUID   `json:"id"`
 	UserID          uuid.UUID   `json:"userId"`
-	PlayerSeasonID  int         `json:"playerSeasonId"`
+	PlayerSeasonID  *int        `json:"playerSeasonId,omitempty"`
+	IndexID         *int        `json:"indexId,omitempty"`
 	Side            OrderSide   `json:"side"`
 	Quantity        int         `json:"quantity"`
 	Price           float64     `json:"price"`
@@ -172,7 +173,8 @@ type Trade struct {
 	ID              uuid.UUID `json:"id"`
 	OrderID         uuid.UUID `json:"orderId"`
 	UserID          uuid.UUID `json:"userId"`
-	PlayerSeasonID  int       `json:"playerSeasonId"`
+	PlayerSeasonID  *int      `json:"playerSeasonId,omitempty"`
+	IndexID         *int      `json:"indexId,omitempty"`
 	Side            OrderSide `json:"side"`
 	Quantity        int       `json:"quantity"`
 	Price           float64   `json:"price"`

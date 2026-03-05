@@ -18,7 +18,8 @@ func NewTradingHandler(trading *service.TradingService) *TradingHandler {
 }
 
 type placeOrderRequest struct {
-	PlayerSeasonID int    `json:"player_season_id" binding:"required"`
+	PlayerSeasonID int    `json:"player_season_id"`
+	IndexID        int    `json:"index_id"`
 	Side           string `json:"side" binding:"required,oneof=buy sell"`
 	Quantity       int    `json:"quantity" binding:"required,min=1"`
 }
@@ -36,13 +37,32 @@ func (h *TradingHandler) PlaceOrder(c *gin.Context) {
 		return
 	}
 
-	trade, err := h.Trading.PlaceOrder(
-		c.Request.Context(),
-		userID.(uuid.UUID),
-		req.PlayerSeasonID,
-		model.OrderSide(req.Side),
-		req.Quantity,
-	)
+	hasPlayer := req.PlayerSeasonID != 0
+	hasIndex := req.IndexID != 0
+	if hasPlayer == hasIndex {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "provide exactly one of player_season_id or index_id"})
+		return
+	}
+
+	var trade *model.Trade
+	var err error
+	if hasPlayer {
+		trade, err = h.Trading.PlaceOrder(
+			c.Request.Context(),
+			userID.(uuid.UUID),
+			req.PlayerSeasonID,
+			model.OrderSide(req.Side),
+			req.Quantity,
+		)
+	} else {
+		trade, err = h.Trading.PlaceIndexOrder(
+			c.Request.Context(),
+			userID.(uuid.UUID),
+			req.IndexID,
+			model.OrderSide(req.Side),
+			req.Quantity,
+		)
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

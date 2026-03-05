@@ -67,6 +67,7 @@ psql $DATABASE_URL -f migrations/004_index_ticker_and_types.up.sql
 psql $DATABASE_URL -f migrations/005_renaissance_ipo_index.up.sql
 psql $DATABASE_URL -f migrations/006_oauth_users.up.sql
 psql $DATABASE_URL -f migrations/007_user_username_seq.up.sql
+psql $DATABASE_URL -f migrations/008_index_trading.up.sql
 ```
 
 ### 3. Set up Supabase Auth (Google)

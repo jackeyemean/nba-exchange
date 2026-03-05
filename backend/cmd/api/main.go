@@ -43,11 +43,12 @@ func main() {
 	orderRepo := repository.NewOrderRepository(pool)
 	tradeRepo := repository.NewTradeRepository(pool)
 	positionRepo := repository.NewPositionRepository(pool)
+	indexPositionRepo := repository.NewIndexPositionRepository(pool)
 	indexRepo := repository.NewIndexRepository(pool)
 	leaderboardRepo := repository.NewLeaderboardRepository(pool)
 
 	tradingSvc := service.NewTradingService(pool)
-	portfolioSvc := service.NewPortfolioService(positionRepo, playerRepo, walletRepo)
+	portfolioSvc := service.NewPortfolioService(positionRepo, indexPositionRepo, playerRepo, indexRepo, walletRepo)
 
 	authH := handler.NewAuthHandler(userRepo)
 	playersCache := cache.NewTTL(30 * time.Second)

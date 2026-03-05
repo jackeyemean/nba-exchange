@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -29,6 +30,7 @@ func (h *PortfolioHandler) GetPortfolio(c *gin.Context) {
 
 	summary, err := h.Portfolio.GetPortfolio(c.Request.Context(), userID)
 	if err != nil {
+		log.Printf("GetPortfolio error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch portfolio"})
 		return
 	}

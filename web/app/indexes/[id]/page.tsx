@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { PriceChart } from "@/components/price-chart";
+import { IndexTradePanel } from "@/components/index-trade-panel";
 import { formatCurrency, formatCompact, formatPct, pctColor } from "@/lib/utils";
 import Link from "next/link";
 
@@ -85,6 +86,7 @@ export default function IndexDetailPage() {
   const params = useParams();
   const id = Number(params.id);
   const [range, setRange] = useState<PriceRange>("season");
+  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["index", id, range],
@@ -145,26 +147,40 @@ export default function IndexDetailPage() {
         </div>
       </div>
 
-      <div className="mb-8 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">Index Level</h2>
-          <div className="flex gap-1 rounded-md border border-neutral-200 p-0.5 dark:border-neutral-700">
-            {(["all", "season", "month", "week", "day"] as const).map((r) => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`rounded px-2 py-1 text-xs font-medium capitalize transition-colors ${
-                  range === r
-                    ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                    : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
-                }`}
-              >
-                {r === "all" ? "All Time" : r === "season" ? "This Season" : r === "month" ? "Past Month" : r === "week" ? "Past Week" : "Past Day"}
-              </button>
-            ))}
+      <div className="mb-8 grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <div className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">Index Level</h2>
+              <div className="flex gap-1 rounded-md border border-neutral-200 p-0.5 dark:border-neutral-700">
+                {(["all", "season", "month", "week", "day"] as const).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setRange(r)}
+                    className={`rounded px-2 py-1 text-xs font-medium capitalize transition-colors ${
+                      range === r
+                        ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                        : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                    }`}
+                  >
+                    {r === "all" ? "All Time" : r === "season" ? "This Season" : r === "month" ? "Past Month" : r === "week" ? "Past Week" : "Past Day"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <PriceChart data={chartData} range={range} />
           </div>
         </div>
-        <PriceChart data={chartData} range={range} />
+        <div>
+          <IndexTradePanel
+            indexId={id}
+            indexName={displayName(index.name)}
+            currentPrice={chartData.length > 0 ? chartData[chartData.length - 1].price : 0}
+            onTradeComplete={() => {
+              queryClient.invalidateQueries({ queryKey: ["portfolio"] });
+            }}
+          />
+        </div>
       </div>
 
       <h2 className="mb-3 text-lg font-semibold">Holdings</h2>

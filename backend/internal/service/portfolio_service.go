@@ -23,24 +23,49 @@ type PortfolioPosition struct {
 	} `json:"player"`
 }
 
+type PortfolioIndexPosition struct {
+	IndexID          int     `json:"indexId"`
+	Quantity         int     `json:"quantity"`
+	AvgCost          float64 `json:"avgCost"`
+	CurrentPrice     float64 `json:"currentPrice"`
+	MarketValue      float64 `json:"marketValue"`
+	UnrealizedPnL    float64 `json:"unrealizedPnl"`
+	UnrealizedPnLPct float64 `json:"unrealizedPnlPct"`
+	Index            *struct {
+		Name   string `json:"name"`
+		Ticker string `json:"ticker"`
+	} `json:"index"`
+}
+
 type PortfolioSummary struct {
-	Positions          []PortfolioPosition `json:"positions"`
-	CashBalance        float64             `json:"cashBalance"`
-	TotalPositionValue float64            `json:"totalPositionValue"`
-	TotalValue         float64            `json:"totalValue"`
+	Positions          []PortfolioPosition      `json:"positions"`
+	IndexPositions     []PortfolioIndexPosition `json:"indexPositions"`
+	CashBalance        float64                  `json:"cashBalance"`
+	TotalPositionValue float64                  `json:"totalPositionValue"`
+	TotalValue         float64                  `json:"totalValue"`
 }
 
 type PortfolioService struct {
-	Positions *repository.PositionRepository
-	Players   *repository.PlayerRepository
-	Wallets   *repository.WalletRepository
+	Positions      *repository.PositionRepository
+	IndexPositions *repository.IndexPositionRepository
+	Players        *repository.PlayerRepository
+	Indexes        *repository.IndexRepository
+	Wallets        *repository.WalletRepository
 }
 
-func NewPortfolioService(positions *repository.PositionRepository, players *repository.PlayerRepository, wallets *repository.WalletRepository) *PortfolioService {
+func NewPortfolioService(
+	positions *repository.PositionRepository,
+	indexPositions *repository.IndexPositionRepository,
+	players *repository.PlayerRepository,
+	indexes *repository.IndexRepository,
+	wallets *repository.WalletRepository,
+) *PortfolioService {
 	return &PortfolioService{
-		Positions: positions,
-		Players:   players,
-		Wallets:   wallets,
+		Positions:      positions,
+		IndexPositions: indexPositions,
+		Players:        players,
+		Indexes:        indexes,
+		Wallets:        wallets,
 	}
 }
 
@@ -95,8 +120,60 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, userID uuid.UUID) (
 		portfolioValue += marketValue
 	}
 
+	// Index positions
+	indexPositions, err := s.IndexPositions.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get index positions: %w", err)
+	}
+
+	var portfolioIndexPositions []PortfolioIndexPosition
+	for _, pos := range indexPositions {
+		level, err := s.Indexes.GetLatestLevel(ctx, pos.IndexID)
+		if err != nil {
+			continue
+		}
+		marketValue := level * float64(pos.Quantity)
+		pnl := (level - pos.AvgCost) * float64(pos.Quantity)
+		var pnlPct float64
+		if pos.AvgCost > 0 {
+			pnlPct = (level - pos.AvgCost) / pos.AvgCost
+		}
+
+		idx, err := s.Indexes.GetByID(ctx, pos.IndexID)
+		if err != nil {
+			continue
+		}
+		ticker := ""
+		if idx.Ticker != nil {
+			ticker = *idx.Ticker
+		}
+		displayName := idx.Name
+		if len(displayName) >= 6 && displayName[len(displayName)-6:] == " Index" {
+			displayName = displayName[:len(displayName)-6]
+		}
+
+		portfolioIndexPositions = append(portfolioIndexPositions, PortfolioIndexPosition{
+			IndexID:          pos.IndexID,
+			Quantity:         pos.Quantity,
+			AvgCost:          pos.AvgCost,
+			CurrentPrice:     level,
+			MarketValue:      marketValue,
+			UnrealizedPnL:    pnl,
+			UnrealizedPnLPct: pnlPct,
+			Index: &struct {
+				Name   string `json:"name"`
+				Ticker string `json:"ticker"`
+			}{
+				Name:   displayName,
+				Ticker: ticker,
+			},
+		})
+		portfolioValue += marketValue
+	}
+
 	return &PortfolioSummary{
 		Positions:          portfolioPositions,
+		IndexPositions:     portfolioIndexPositions,
 		CashBalance:        wallet.Balance,
 		TotalPositionValue: portfolioValue,
 		TotalValue:         wallet.Balance + portfolioValue,
