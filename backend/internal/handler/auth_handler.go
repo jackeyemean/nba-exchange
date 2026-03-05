@@ -75,8 +75,8 @@ func (h *AuthHandler) UpdateUsername(c *gin.Context) {
 	}
 
 	username := req.Username
-	if len(username) < 1 || len(username) > 16 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "username must be 1-16 characters"})
+	if len(username) < 1 || len(username) > 23 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "username must be 1-23 characters"})
 		return
 	}
 	if goaway.IsProfane(username) {

@@ -28,7 +28,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 
 export function Navbar() {
   const { theme, toggle } = useTheme();
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, username } = useAuth();
 
   return (
     <header className="sticky top-0 z-50 border-b border-neutral-200 bg-white/80 backdrop-blur-md dark:border-neutral-800 dark:bg-neutral-950/80">
@@ -48,7 +48,7 @@ export function Navbar() {
           <NavLink href="/leaderboard">Leaderboard</NavLink>
           {isLoggedIn && (
             <>
-              <NavLink href="/profile">Profile</NavLink>
+              <NavLink href="/profile">{username || "Profile"}</NavLink>
               <Link
                 href="/logout"
                 className="rounded-md px-2 py-1 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"

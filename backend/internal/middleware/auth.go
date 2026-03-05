@@ -187,7 +187,8 @@ func ensureUserAndWallet(ctx context.Context, userRepo *repository.UserRepositor
 	// Check if user already exists
 	_, err := userRepo.GetByID(ctx, userID)
 	if err == nil {
-		return nil
+		// User exists: ensure wallet exists (in case it was never created)
+		return walletRepo.CreateIfNotExists(ctx, userID, startingBalance)
 	}
 
 	_, email, _, err := parseSupabaseTokenForSync(tokenStr, secret, supabaseURL)

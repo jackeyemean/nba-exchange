@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 
 export default function LeaderboardPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["leaderboard"],
     queryFn: () => api.getLeaderboard(),
   });
@@ -20,7 +20,13 @@ export default function LeaderboardPage() {
         <div className="py-20 text-center text-neutral-500">Loading...</div>
       )}
 
-      {!isLoading && entries.length === 0 && (
+      {isError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 py-6 text-center text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+          Failed to load leaderboard. {error instanceof Error ? error.message : "Check that the API is running."}
+        </div>
+      )}
+
+      {!isLoading && !isError && entries.length === 0 && (
         <div className="rounded-lg border border-neutral-200 py-10 text-center text-neutral-500 dark:border-neutral-800">
           No leaderboard data yet.
         </div>

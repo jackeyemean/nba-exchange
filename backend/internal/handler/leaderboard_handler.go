@@ -37,9 +37,10 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	}
 
 	// If no snapshots for requested date, use live computation (e.g. for today)
-	today := time.Now().Truncate(24 * time.Hour)
-	reqDate := date.Truncate(24 * time.Hour)
-	if len(snapshots) == 0 && reqDate.Equal(today) {
+	// Compare date strings to avoid timezone bugs (Parse uses UTC, Now uses local)
+	todayStr := time.Now().Format("2006-01-02")
+	reqDateStr := date.Format("2006-01-02")
+	if len(snapshots) == 0 && reqDateStr == todayStr {
 		snapshots, err = h.Leaderboard.GetLive(c.Request.Context(), limit)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch leaderboard"})
