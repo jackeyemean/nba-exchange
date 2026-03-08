@@ -152,15 +152,13 @@ def compute_historical_prices(
             day_data.append((ps_id, player_id, team_id, float_shares, status, birthdate,
                             ext_id, perf_score, blended_raw, games_before, n_games, prior_raw))
 
-        max_raw = max(d[8] for d in day_data) if day_data else 100.0
-        age_perf_scale = max_raw if max_raw > 0 else 100.0
-
         for (ps_id, player_id, team_id, float_shares, status, birthdate, ext_id,
              perf_score, blended_raw, games_before, n_games, prior_raw) in day_data:
             normalized = perf_score / 100.0
             base_price = (normalized ** PRICE_EXPONENT) * PRICE_CEILING
 
-            age_perf_score = min(100.0, blended_raw / age_perf_scale * 100.0)
+            # Age multiplier based on player's own performance (0-100), not relative to league
+            age_perf_score = min(100.0, blended_raw)
             age_mult = get_age_multiplier(birthdate, age_perf_score)
 
             if n_games > 0:
@@ -316,16 +314,14 @@ def compute_prices_for_single_date(
         day_data.append((ps_id, player_id, team_id, float_shares, status, birthdate,
                         ext_id, perf_score, blended_raw, games_before, n_games, prior_raw))
 
-    max_raw = max(d[8] for d in day_data) if day_data else 100.0
-    age_perf_scale = max_raw if max_raw > 0 else 100.0
-
     results = []
     for (ps_id, player_id, team_id, float_shares, status, birthdate, ext_id,
          perf_score, blended_raw, games_before, n_games, prior_raw) in day_data:
         normalized = perf_score / 100.0
         base_price = (normalized ** PRICE_EXPONENT) * PRICE_CEILING
 
-        age_perf_score = min(100.0, blended_raw / age_perf_scale * 100.0)
+        # Age multiplier based on player's own performance (0-100), not relative to league
+        age_perf_score = min(100.0, blended_raw)
         age_mult = get_age_multiplier(birthdate, age_perf_score)
 
         if n_games > 0:

@@ -34,8 +34,9 @@ from ingestion.nba import (
     sync_teams,
     sync_players_uniform,
 )
-from indexes.calculator import rebalance_indexes, setup_default_indexes
-from utils.dates import market_date_today
+from indexes.calculator import _get_rookie_external_ids, setup_default_indexes
+from scripts.daily_update import run_update_for_date
+from utils.dates import market_date_today, trading_days_in_range
 from tiers.assignment import assign_tiers_from_ranking
 from tiers.year0 import (
     apply_tiers_to_current_season,
@@ -172,77 +173,38 @@ def main(debug: bool, as_of_str: str | None):
             )
         conn.commit()
 
-        compute_historical_prices(
-            conn,
-            season_id_2526,
-            prior_avgs_2526,
-            season_start=cfg_2526["start"],
-            as_of_date=as_of_date,
-        )
-
-        with conn.cursor() as cur:
-            cur.execute(
-                """UPDATE price_history ph
-                   SET market_cap = ROUND(ph.price * ps.float_shares, 2)
-                   FROM player_seasons ps
-                   WHERE ph.player_season_id = ps.id AND ps.season_id = %s""",
-                (season_id_2526,),
-            )
-        conn.commit()
-
-        # --- Phase 5: Initialize indexes ---
-        log.info("--- Phase 5: Initialize indexes for 2025-26 ---")
+        # --- Phase 5: Initialize indexes, then run daily update for each date (same as update_market) ---
+        log.info("--- Phase 5: Initialize indexes and backfill 2025-26 via daily update ---")
         setup_default_indexes(conn, season_id_2526)
-        # Clear index_history for current season so we don't compound on corrupted data.
         with conn.cursor() as cur:
+            cur.execute("DELETE FROM index_history WHERE trade_date >= %s", (cfg_2526["start"],))
             cur.execute(
-                "DELETE FROM index_history WHERE trade_date >= %s",
-                (cfg_2526["start"],),
-            )
-            # IPO constituents change each season (new rookies); reset to 1000 by clearing
-            # all IPO history so prev_level is empty on first 2025-26 date.
-            cur.execute(
-                """
-                DELETE FROM index_history
-                WHERE index_id IN (SELECT id FROM indexes WHERE index_type = 'ipo')
-                """,
+                "DELETE FROM index_history WHERE index_id IN (SELECT id FROM indexes WHERE index_type = 'ipo')"
             )
         conn.commit()
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT ph.trade_date FROM price_history ph
-                JOIN player_seasons ps ON ph.player_season_id = ps.id
-                WHERE ps.season_id = %s
-                ORDER BY ph.trade_date
-                """,
-                (season_id_2526,),
-            )
-            trade_dates = [row[0] for row in cur.fetchall()]
-        # Fetch rookie IDs once (same for all dates) instead of calling DraftHistory API 100+ times
-        from indexes.calculator import _get_rookie_external_ids
+
+        trade_dates = trading_days_in_range(cfg_2526["start"], as_of_date)
         rookie_ids = _get_rookie_external_ids(conn, season_id_2526)
-        # Pre-fetch season_start and indexes once (same for all dates)
         with conn.cursor() as cur:
-            cur.execute("SELECT start_date FROM seasons WHERE id = %s", (season_id_2526,))
-            row = cur.fetchone()
-            if row and row[0]:
-                d = row[0]
-                season_start_2526 = d.date() if hasattr(d, "date") else d
-            else:
-                season_start_2526 = None
             cur.execute("SELECT id, name, index_type, team_id FROM indexes")
             indexes_list = cur.fetchall()
-        # Batch commits: commit every 10 dates to reduce overhead
+
         for i, d in enumerate(trade_dates):
-            rebalance_indexes(
-                conn, season_id_2526, d, debug=debug,
+            run_update_for_date(
+                conn,
+                season_id_2526,
+                "2025-26",
+                d,
+                skip_game_sync=True,
+                prior_avgs=prior_avgs_2526,
+                season_start=cfg_2526["start"],
                 rookie_external_ids=rookie_ids,
-                season_start=season_start_2526,
                 indexes=indexes_list,
                 commit=(i + 1) % 10 == 0 or i == len(trade_dates) - 1,
+                debug=debug,
             )
-        log.info("Initialized indexes for %d trade dates", len(trade_dates))
+        conn.commit()
+        log.info("Backfilled %d trade dates for 2025-26 (same logic as update_market)", len(trade_dates))
 
         log.info("=== Restart Simulation Complete ===")
     except Exception:

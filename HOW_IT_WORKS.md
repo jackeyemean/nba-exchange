@@ -177,11 +177,11 @@ The exponent makes the curve steep: going from 50→55 has a bigger dollar impac
 
 ### Age Multiplier (0.70× — 1.50×)
 
-- **Prime (28–32):** 1.00× — no change
+- **Prime (30):** 1.00× — no change
 - **Younger than 28:** Boost. Two parts:
   - **Pure:** +0.81% per year below prime
   - **Performance-scaled:** +6.34% per year × (perf/100). Elite young players (Flagg, Wemby, etc.) reach the 1.50× ceiling; bench players get a smaller boost.
-- **Older than 32:** Tax. Two parts:
+- **Older than 30:** Tax. Two parts:
   - **Pure:** −2.6% per year above prime
   - **Performance-scaled:** −4.0% per year × (1 − perf/100). A 35-year-old struggling gets a bigger tax than a 35-year-old still performing.
 - **Cap:** Age 38+ treated as 38. Floor 0.70×, ceiling **1.50×** for young high performers.

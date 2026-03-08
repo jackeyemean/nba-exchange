@@ -20,7 +20,7 @@ Run from engine/ directory.
 
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 _engine_dir = Path(__file__).resolve().parent.parent
@@ -30,16 +30,9 @@ if str(_engine_dir) not in sys.path:
 import click
 
 from config import get_db_connection
-from db.prices import get_prev_prices, insert_price_history
 from db.seasons import get_season_by_label
-from formulas.compute import compute_prices_for_single_date
-from ingestion.game_stats import sync_incremental_game_stats
-from ingestion.nba import (
-    fetch_prior_season_averages,
-    sync_standings,
-    sync_teams,
-)
-from indexes.calculator import rebalance_indexes
+from ingestion.nba import sync_teams
+from scripts.daily_update import run_update_for_date
 from utils.dates import market_date_today
 
 logging.basicConfig(
@@ -78,54 +71,12 @@ def main(season: str, trade_date_str: str | None):
 
         sync_teams(conn)
 
-        log.info("Syncing incremental game stats (through yesterday)...")
-        try:
-            # Sync through yesterday only. NBA API uses scheduled date; March 7th night games = game_date March 7.
-            sync_incremental_game_stats(conn, season_id, season, through_date=trade_date - timedelta(days=1))
-        except Exception as e:
-            log.warning("Game stats sync failed (NBA API may be unreachable from this network): %s — continuing with existing data", e)
-
-        log.info("Syncing standings...")
-        try:
-            sync_standings(conn, season_id, season)
-        except Exception as e:
-            log.warning("Standings sync failed: %s — continuing (win%% uses game_stats, not standings)", e)
-
-        prior_avgs = fetch_prior_season_averages(season)
-        season_start = s["start_date"]
-        if hasattr(season_start, "date"):
-            season_start = season_start.date()
-        prev_prices = get_prev_prices(conn, season_id, trade_date)
-
-        results = compute_prices_for_single_date(
-            conn, season_id, prior_avgs, season_start, trade_date, prev_prices
-        )
-
-        if not results:
-            log.warning("No price results - skipping insert and rebalance")
+        count = run_update_for_date(conn, season_id, season, trade_date)
+        if count == 0:
+            log.warning("No price results - skipping")
             return
 
-        for row in results:
-            insert_price_history(
-                conn,
-                player_season_id=row["player_season_id"],
-                trade_date=row["trade_date"],
-                perf_score=row["perf_score"],
-                age_mult=row["age_mult"],
-                win_pct_mult=row["win_pct_mult"],
-                salary_eff_mult=row["salary_eff_mult"],
-                raw_score=row["raw_score"],
-                price=row["price"],
-                market_cap=row["market_cap"],
-                prev_price=row["prev_price"],
-                change_pct=row["change_pct"],
-            )
-        conn.commit()
-        log.info("Inserted %d price history rows for %s", len(results), trade_date)
-
-        rebalance_indexes(conn, season_id, trade_date)
-        conn.commit()
-
+        log.info("Inserted %d price history rows for %s", count, trade_date)
         log.info("=== Daily Market Update Complete ===")
     except Exception:
         log.exception("Daily market update failed")

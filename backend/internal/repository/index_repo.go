@@ -150,6 +150,8 @@ type ConstituentWithDetails struct {
 }
 
 func (r *IndexRepository) GetConstituentsWithDetails(ctx context.Context, indexID int) ([]ConstituentWithDetails, error) {
+	// Use stored change_pct from price_history (same trade_date as index) to avoid off-by-one.
+	// Index rebalance uses price_history.change_pct for that trade_date; constituents must match.
 	rows, err := r.Pool.Query(ctx,
 		`SELECT ic.id, ic.index_id, ic.player_season_id, ic.weight,
 		        p.first_name, p.last_name,
@@ -158,27 +160,18 @@ func (r *IndexRepository) GetConstituentsWithDetails(ctx context.Context, indexI
 		        ps.tier::text,
 		        ps.float_shares,
 		        COALESCE(ph.price, 0),
-		        CASE WHEN prev_day.price IS NOT NULL AND prev_day.price > 0
-		             THEN ROUND((ph.price - prev_day.price) / prev_day.price, 6)
-		             ELSE NULL
-		        END,
+		        ph.change_pct,
 		        COALESCE(ph.market_cap, 0)
 		 FROM index_constituents ic
 		 JOIN player_seasons ps ON ps.id = ic.player_season_id
 		 JOIN players p ON p.id = ps.player_id
 		 LEFT JOIN teams t ON t.id = ps.team_id
 		 LEFT JOIN LATERAL (
-		     SELECT price, market_cap
+		     SELECT price, market_cap, change_pct
 		     FROM price_history
 		     WHERE player_season_id = ic.player_season_id
 		     ORDER BY trade_date DESC LIMIT 1
 		 ) ph ON true
-		 LEFT JOIN LATERAL (
-		     SELECT price FROM price_history
-		     WHERE player_season_id = ic.player_season_id
-		     ORDER BY trade_date DESC
-		     OFFSET 1 LIMIT 1
-		 ) prev_day ON true
 		 WHERE ic.index_id = $1
 		 ORDER BY ic.weight DESC`,
 		indexID,
