@@ -354,6 +354,43 @@ Then: **Actions** tab → **Daily Market Update** → **Run workflow** to test.
 
 ---
 
+## Part 4b: Fly.io Worker (alternative if GitHub Actions times out)
+
+If NBA.com blocks GitHub Actions (Azure IPs), deploy a small worker on Fly.io and trigger it via cron-job.org. Fly.io may use different IPs that work.
+
+### 4b.1 Create app and set secrets
+
+```bash
+fly apps create hoop-exchange-worker
+fly secrets set DATABASE_URL="postgresql://postgres.xxx:password@...?sslmode=require" -a hoop-exchange-worker
+# Generate and save the token for cron-job.org (you'll need it in step 4b.3)
+CRON_TOKEN=$(openssl rand -hex 32)
+echo "Save this for cron-job.org: $CRON_TOKEN"
+fly secrets set CRON_SECRET="$CRON_TOKEN" -a hoop-exchange-worker
+```
+
+### 4b.2 Deploy
+
+From the `engine/` directory:
+
+```bash
+cd engine
+fly deploy . -c worker/fly.toml -a hoop-exchange-worker
+```
+
+### 4b.3 Set up cron-job.org
+
+1. Go to [cron-job.org](https://cron-job.org) (free) and create an account.
+2. **Create Cronjob** → **Create cronjob**.
+3. **URL**: `https://hoop-exchange-worker.fly.dev/run?token=YOUR_CRON_SECRET`
+4. **Schedule**: Daily at 11:00 UTC (6am ET).
+5. **Request method**: GET.
+6. Save.
+
+To test: open the URL in a browser (or `curl` it). You should get `{"ok": true, ...}` on success.
+
+---
+
 ## Part 5: Seed initial data (one-time)
 
 After everything is deployed, run the engine once to populate players, prices, and indexes:

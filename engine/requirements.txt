@@ -1,3 +1,4 @@
+flask
 nba_api
 basketball_reference_web_scraper
 psycopg2-binary

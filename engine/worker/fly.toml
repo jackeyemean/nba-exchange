@@ -1,0 +1,26 @@
+# Fly.io worker: HTTP-triggered market update
+# Deploy from repo root: fly deploy --config engine/worker/fly.toml --build-arg BUILD_CONTEXT=engine
+# Or from engine/: fly deploy --config worker/fly.toml
+app = 'hoop-exchange-worker'
+primary_region = 'yyz'
+
+[build]
+  dockerfile = "Dockerfile"
+  [build.args]
+    # unused; build context is engine/
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1
