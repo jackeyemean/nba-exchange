@@ -481,6 +481,137 @@ def sync_game_logs(conn, season_id: int, season_label: str):
     log.info("Loaded %d total game stat rows", len(rows_to_insert))
 
 
+def sync_game_logs_for_dates(
+    conn, season_id: int, season_label: str, dates: list
+) -> int:
+    """
+    Fetch game logs via LeagueGameLog (same as restart_simulation), filter by dates, upsert.
+    Use for incremental sync (update_market). One API call, no delete.
+    """
+    from nba_api.stats.endpoints import LeagueGameLog
+    from psycopg2.extras import execute_values
+
+    if not dates:
+        return 0
+
+    date_strs = {d.isoformat() if hasattr(d, "isoformat") else str(d)[:10] for d in dates}
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'game_stats' AND column_name = 'wl'"
+        )
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE game_stats ADD COLUMN wl CHAR(1)")
+            conn.commit()
+            log.info("Added wl column to game_stats")
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT ps.id, p.external_id FROM player_seasons ps
+               JOIN players p ON ps.player_id = p.id
+               WHERE ps.season_id = %s""",
+            (season_id,),
+        )
+        ps_map = {row[1]: row[0] for row in cur.fetchall()}
+
+    log.info("Fetching LeagueGameLog for %s (filtering %d dates)...", season_label, len(dates))
+    try:
+        resp = safe_request(
+            LeagueGameLog,
+            season=season_label,
+            season_type_all_star="Regular Season",
+            player_or_team_abbreviation="P",
+        )
+        df = resp.get_data_frames()[0]
+    except Exception:
+        log.exception("Failed to fetch LeagueGameLog")
+        return 0
+
+    # Filter to requested dates
+    df["_gdate"] = df["GAME_DATE"].astype(str).str[:10]
+    df = df[df["_gdate"].isin(date_strs)]
+    log.info("Filtered to %d rows for dates %s", len(df), sorted(date_strs))
+
+    rows_to_insert = []
+    for idx in range(len(df)):
+        row = df.iloc[idx]
+        player_ext = str(row["PLAYER_ID"])
+        ps_id = ps_map.get(player_ext)
+        if ps_id is None:
+            continue
+
+        game_date_str = str(row["GAME_DATE"])[:10]
+        game_id = str(row["GAME_ID"])
+        if not game_date_str or not game_id:
+            continue
+
+        wl = str(row.get("WL", "") or "")[:1].upper() or None
+        if wl and wl not in ("W", "L"):
+            wl = None
+
+        pts = int(row.get("PTS", 0) or 0)
+        ast = int(row.get("AST", 0) or 0)
+        reb = int(row.get("REB", 0) or 0)
+        stl = int(row.get("STL", 0) or 0)
+        blk = int(row.get("BLK", 0) or 0)
+        tov = int(row.get("TOV", 0) or 0)
+        fgm = int(row.get("FGM", 0) or 0)
+        fga = int(row.get("FGA", 0) or 0)
+        ftm = int(row.get("FTM", 0) or 0)
+        fta = int(row.get("FTA", 0) or 0)
+        fg3m = int(row.get("FG3M", 0) or 0)
+        fg3a = int(row.get("FG3A", 0) or 0)
+        oreb = int(row.get("OREB", 0) or 0)
+        dreb = int(row.get("DREB", 0) or 0)
+
+        min_val = row.get("MIN", 0)
+        try:
+            minutes = float(min_val) if min_val else 0.0
+        except (ValueError, TypeError):
+            minutes = 0.0
+
+        raw_perf = calculate_raw_perf(
+            pts, fgm, fga, ftm, fta, fg3m, fg3a, oreb, dreb,
+            ast, stl, blk, tov,
+        )
+        ts_pct = round(pts / (2.0 * (fga + 0.44 * fta)) if (fga + 0.44 * fta) > 0 else 0.0, 4)
+
+        rows_to_insert.append((
+            ps_id, game_date_str, game_id, minutes,
+            pts, ast, reb, stl, blk, tov, fgm, fga, ftm, fta,
+            fg3m, fg3a, oreb, dreb,
+            round(raw_perf, 4), ts_pct, wl,
+        ))
+
+    if not rows_to_insert:
+        log.info("No game stat rows for dates %s", sorted(date_strs))
+        return 0
+
+    with conn.cursor() as cur:
+        execute_values(
+            cur,
+            """INSERT INTO game_stats
+                   (player_season_id, game_date, external_game_id, minutes,
+                    pts, ast, reb, stl, blk, tov, fgm, fga, ftm, fta,
+                    fg3m, fg3a, oreb, dreb,
+                    raw_perf_score, ts_pct, wl)
+               VALUES %s
+               ON CONFLICT (player_season_id, external_game_id) DO UPDATE SET
+                   minutes = EXCLUDED.minutes,
+                   pts = EXCLUDED.pts, ast = EXCLUDED.ast, reb = EXCLUDED.reb,
+                   stl = EXCLUDED.stl, blk = EXCLUDED.blk, tov = EXCLUDED.tov,
+                   fgm = EXCLUDED.fgm, fga = EXCLUDED.fga, ftm = EXCLUDED.ftm, fta = EXCLUDED.fta,
+                   fg3m = EXCLUDED.fg3m, fg3a = EXCLUDED.fg3a, oreb = EXCLUDED.oreb, dreb = EXCLUDED.dreb,
+                   raw_perf_score = EXCLUDED.raw_perf_score, ts_pct = EXCLUDED.ts_pct,
+                   wl = COALESCE(EXCLUDED.wl, game_stats.wl)""",
+            rows_to_insert,
+            page_size=1000,
+        )
+    conn.commit()
+    log.info("Upserted %d game stat rows for dates %s", len(rows_to_insert), sorted(date_strs))
+    return len(rows_to_insert)
+
+
 def sync_standings(conn, season_id: int, season_label: str):
     """Fetch standings from nba_api and upsert into team_standings."""
     from nba_api.stats.endpoints import LeagueStandings

@@ -159,7 +159,7 @@ func (r *IndexRepository) GetConstituentsWithDetails(ctx context.Context, indexI
 		        ps.float_shares,
 		        COALESCE(ph.price, 0),
 		        CASE WHEN prev_day.price IS NOT NULL AND prev_day.price > 0
-		             THEN ROUND((curr_day.price - prev_day.price) / prev_day.price, 6)
+		             THEN ROUND((ph.price - prev_day.price) / prev_day.price, 6)
 		             ELSE NULL
 		        END,
 		        COALESCE(ph.market_cap, 0)
@@ -178,12 +178,6 @@ func (r *IndexRepository) GetConstituentsWithDetails(ctx context.Context, indexI
 		     WHERE player_season_id = ic.player_season_id
 		     ORDER BY trade_date DESC
 		     OFFSET 1 LIMIT 1
-		 ) curr_day ON true
-		 LEFT JOIN LATERAL (
-		     SELECT price FROM price_history
-		     WHERE player_season_id = ic.player_season_id
-		     ORDER BY trade_date DESC
-		     OFFSET 2 LIMIT 1
 		 ) prev_day ON true
 		 WHERE ic.index_id = $1
 		 ORDER BY ic.weight DESC`,

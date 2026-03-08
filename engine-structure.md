@@ -25,7 +25,7 @@ engine/
 │   └── compute.py              # compute_historical_prices, compute_prices_for_single_date
 ├── ingestion/
 │   ├── nba.py                  # sync_teams, sync_players, sync_game_logs, sync_standings
-│   └── game_stats.py           # sync_game_stats_for_date (date-specific for daily)
+│   └── game_stats.py           # sync_incremental_game_stats (LeagueGameLog, date-filtered)
 ├── tiers/
 │   ├── assignment.py           # assign_tiers_by_perf, assign_tiers_from_ranking
 │   └── year0.py                # build_year0_tier_fn, apply_year0_tiers_from_prices, rookie_tier_from_pick
