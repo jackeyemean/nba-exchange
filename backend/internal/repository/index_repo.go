@@ -68,9 +68,9 @@ func (r *IndexRepository) ListAllWithPrices(ctx context.Context) ([]IndexWithPri
 	rows, err := r.Pool.Query(ctx,
 		`SELECT i.id, i.name, i.index_type, i.description, i.ticker, i.team_id, i.created_at,
 		        t.abbreviation,
-		        ih.level,
-		        CASE WHEN prev_day.level IS NOT NULL AND prev_day.level > 0
-		             THEN ROUND((curr_day.level - prev_day.level) / prev_day.level, 6)
+		        curr.level,
+		        CASE WHEN prev.level IS NOT NULL AND prev.level > 0
+		             THEN ROUND((curr.level - prev.level) / prev.level, 6)
 		             ELSE NULL
 		        END AS change_pct
 		 FROM indexes i
@@ -79,20 +79,14 @@ func (r *IndexRepository) ListAllWithPrices(ctx context.Context) ([]IndexWithPri
 		     SELECT level FROM index_history
 		     WHERE index_id = i.id
 		     ORDER BY trade_date DESC
-		     OFFSET 1 LIMIT 1
-		 ) curr_day ON true
-		 LEFT JOIN LATERAL (
-		     SELECT level FROM index_history
-		     WHERE index_id = i.id
-		     ORDER BY trade_date DESC
-		     OFFSET 2 LIMIT 1
-		 ) prev_day ON true
-		 LEFT JOIN LATERAL (
-		     SELECT level FROM index_history
-		     WHERE index_id = i.id
-		     ORDER BY trade_date DESC
 		     LIMIT 1
-		 ) ih ON true
+		 ) curr ON true
+		 LEFT JOIN LATERAL (
+		     SELECT level FROM index_history
+		     WHERE index_id = i.id
+		     ORDER BY trade_date DESC
+		     OFFSET 1 LIMIT 1
+		 ) prev ON true
 		 ORDER BY i.name`,
 	)
 	if err != nil {

@@ -46,8 +46,8 @@ func (h *IndexHandler) GetIndex(c *gin.Context) {
 	case "week":
 		limit = 5
 	case "day":
-		limit = 2
-		offset = 1 // curr_day and prev_day (last complete trading day), not today
+		limit = 2  // today and yesterday for Past Day chart
+		offset = 0
 	}
 
 	index, err := h.Indexes.GetByID(c.Request.Context(), id)

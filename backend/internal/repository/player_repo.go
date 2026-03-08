@@ -225,19 +225,18 @@ func (r *PlayerRepository) GetPriceHistoryForPlayer(ctx context.Context, playerI
 
 	switch rangeFilter {
 	case RangeDay:
-		// Last complete trading day + previous: curr_day (e.g. Mar 4) and prev_day (e.g. Mar 3)
-		// Price at trade_date X = adjustments from games the calendar day before X
+		// Today and yesterday for Past Day chart; change = (today - yesterday) / yesterday
 		query = `WITH curr_day AS (
 		             SELECT trade_date FROM price_history
 		             WHERE player_season_id = $1
 		             ORDER BY trade_date DESC
-		             OFFSET 1 LIMIT 1
+		             LIMIT 1
 		         ),
 		         prev_day AS (
 		             SELECT trade_date FROM price_history
 		             WHERE player_season_id = $1
 		             ORDER BY trade_date DESC
-		             OFFSET 2 LIMIT 1
+		             OFFSET 1 LIMIT 1
 		         )
 		         SELECT ph.id, ph.player_season_id, ph.trade_date, ph.perf_score, ph.age_mult, ph.win_pct_mult,
 		                ph.salary_eff_mult, ph.raw_score, ph.price, ph.market_cap, ph.prev_price, ph.change_pct, ph.created_at

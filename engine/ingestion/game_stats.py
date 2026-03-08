@@ -177,10 +177,9 @@ def sync_game_stats_for_date(conn, season_label: str, game_date: str) -> int:
 def sync_incremental_game_stats(conn, season_id: int, season_label: str, through_date: date | None = None) -> int:
     """
     Fetch only new game stats since the last date in DB. Uses date-by-date API calls
-    (ScoreboardV2 + BoxScoreTraditionalV2) instead of bulk LeagueGameLog — much smaller
-    payloads, avoids timeouts. Fetches from last_game_date through through_date (default:
-    yesterday). Re-fetches last_date to catch late games (e.g. March 6 games that finish
-    after midnight and appear under March 7 in the API).
+    (ScoreboardV3 + raw BoxScoreTraditionalV3) instead of bulk LeagueGameLog.
+    Fetches from last_game_date through through_date (default: yesterday).
+    NBA API uses scheduled date; March 7th night games = game_date March 7.
     """
     through_date = through_date or (date.today() - timedelta(days=1))
 

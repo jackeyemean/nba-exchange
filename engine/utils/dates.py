@@ -1,6 +1,14 @@
 """Date helpers: trading days, game dates to ingest."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+ET = ZoneInfo("America/New_York")
+
+
+def market_date_today() -> date:
+    """Return today's date in ET. Use for trade_date so market logic is timezone-consistent."""
+    return datetime.now(ET).date()
 
 
 def trading_days_in_range(start: date, end: date) -> list[date]:

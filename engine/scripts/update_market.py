@@ -1,22 +1,26 @@
 """
 Update Market: Daily price update. Run at market open to update prices from prior games.
 
-Uses incremental game sync (date-by-date) instead of bulk LeagueGameLog to avoid timeouts:
-  1. sync_teams, sync_incremental_game_stats (only new dates since last in DB), sync_standings
-  2. Compute prices for today (compute_prices_for_single_date - same formula as compute_historical_prices)
-  3. Write to price_history
+Price on date D = price after last night's games (game_date D-1 in NBA API).
+Daily % change = (price D − price D−1) / price D−1.
+
+Flow:
+  1. sync_teams, sync_incremental_game_stats (through yesterday), sync_standings
+  2. Compute prices for today
+  3. Write to price_history (prev_price = yesterday, change_pct = (today - yesterday) / yesterday)
   4. Rebalance indexes
 
 Usage:
     python scripts/update_market.py --season 2025-26
+    python scripts/update_market.py --season 2025-26 --date 2026-03-08
 
-Schedule: Run daily at 6:00 AM ET (e.g. via GitHub Actions, cron, or systemd timer).
+Schedule: Run daily at 6:00 AM ET.
 Run from engine/ directory.
 """
 
 import logging
 import sys
-from datetime import date
+from datetime import datetime, timedelta
 from pathlib import Path
 
 _engine_dir = Path(__file__).resolve().parent.parent
@@ -36,6 +40,7 @@ from ingestion.nba import (
     sync_teams,
 )
 from indexes.calculator import rebalance_indexes
+from utils.dates import market_date_today
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,7 +52,8 @@ log = logging.getLogger("update_market")
 
 @click.command()
 @click.option("--season", default="2025-26", help="Season label, e.g. 2025-26")
-def main(season: str):
+@click.option("--date", "trade_date_str", default=None, help="Override trade_date (YYYY-MM-DD). Default: today in ET.")
+def main(season: str, trade_date_str: str | None):
     log.info("=== Daily Market Update for %s ===", season)
 
     engine_dir = Path(__file__).resolve().parent.parent
@@ -63,13 +69,19 @@ def main(season: str):
             sys.exit(1)
 
         season_id = s["id"]
-        trade_date = date.today()
+        if trade_date_str:
+            trade_date = datetime.strptime(trade_date_str, "%Y-%m-%d").date()
+            log.info("Trade date: %s (--date override)", trade_date)
+        else:
+            trade_date = market_date_today()
+            log.info("Trade date: %s (ET)", trade_date)
 
         sync_teams(conn)
 
-        log.info("Syncing incremental game stats (new dates only)...")
+        log.info("Syncing incremental game stats (through yesterday)...")
         try:
-            sync_incremental_game_stats(conn, season_id, season)
+            # Sync through yesterday only. NBA API uses scheduled date; March 7th night games = game_date March 7.
+            sync_incremental_game_stats(conn, season_id, season, through_date=trade_date - timedelta(days=1))
         except Exception as e:
             log.warning("Game stats sync failed (NBA API may be unreachable from this network): %s — continuing with existing data", e)
 

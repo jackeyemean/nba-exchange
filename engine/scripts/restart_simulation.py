@@ -4,13 +4,14 @@ determine tiers from performance ranking, then simulate current season with tier
 
 Usage:
     python scripts/restart_simulation.py
+    python scripts/restart_simulation.py --date 2026-03-08
 
 Run from engine/ directory.
 """
 
 import logging
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 # Ensure engine/ is on path when running from scripts/
@@ -34,6 +35,7 @@ from ingestion.nba import (
     sync_players_uniform,
 )
 from indexes.calculator import rebalance_indexes, setup_default_indexes
+from utils.dates import market_date_today
 from tiers.assignment import assign_tiers_from_ranking
 from tiers.year0 import (
     apply_tiers_to_current_season,
@@ -76,7 +78,8 @@ def _backfill_season_with_uniform_shares(
 
 @click.command()
 @click.option("--debug", is_flag=True, help="Enable debug logging for index rebalance (IPO, Toronto Raptors, user-held indexes)")
-def main(debug: bool):
+@click.option("--date", "as_of_str", default=None, help="Override as_of_date for 2025-26 (YYYY-MM-DD). Default: today in ET.")
+def main(debug: bool, as_of_str: str | None):
     """Run full tier bootstrap simulation: 2 prior seasons (uniform shares) -> tier assignment -> current season."""
     if debug:
         import os
@@ -156,6 +159,12 @@ def main(debug: bool):
 
         prior_avgs_2526 = fetch_prior_season_averages("2025-26")
 
+        as_of_date = (
+            datetime.strptime(as_of_str, "%Y-%m-%d").date()
+            if as_of_str
+            else market_date_today()
+        )
+
         with conn.cursor() as cur:
             cur.execute(
                 "DELETE FROM price_history WHERE player_season_id IN (SELECT id FROM player_seasons WHERE season_id = %s)",
@@ -168,7 +177,7 @@ def main(debug: bool):
             season_id_2526,
             prior_avgs_2526,
             season_start=cfg_2526["start"],
-            as_of_date=date.today(),
+            as_of_date=as_of_date,
         )
 
         with conn.cursor() as cur:
