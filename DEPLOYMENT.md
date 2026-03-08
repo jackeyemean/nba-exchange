@@ -400,4 +400,22 @@ This can take several minutes. Alternatively, run it from GitHub Actions by addi
 
 **Engine fails in GitHub Actions**: Check `DATABASE_URL` secret. Ensure `?sslmode=require` is present for Supabase.
 
+**NBA API timeouts in GitHub Actions**: The NBA API (stats.nba.com) blocks or throttles datacenter IPs (GitHub Actions runs on Azure). Root cause: IP-based blocking, not rate limits. Options:
+
+- **Proxy (optional)**: Set `NBA_API_PROXY` to a residential proxy so requests appear from a non-datacenter IP. Add as a GitHub Actions secret and pass it to the workflow:
+  ```yaml
+  env:
+    DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    NBA_API_PROXY: ${{ secrets.NBA_API_PROXY }}  # e.g. http://user:pass@proxy.example.com:8080
+  ```
+- **Local cron** (recommended if you have a machine that's usually on):
+  ```bash
+  # Add to crontab (6am ET daily)
+  0 11 * * * cd /path/to/hoop-exchange/engine && DATABASE_URL="..." python scripts/update_market.py --season 2025-26
+  ```
+- **Self-hosted GitHub runner**: Use a runner on your own machine or VPS — same network as local, usually works.
+- **Fly.io / Railway cron**: Deploy a small worker that runs the script on a schedule; may have better connectivity than GitHub's runners.
+
+Workflow logs now include `[NBA API] endpoint_name (attempt X/Y) starting...` and `succeeded in X.Xs` or `failed after X.Xs` so you can see exactly which call timed out.
+
 **API 502**: Fly.io may be scaling from zero. First request can be slow; subsequent ones should be fast.

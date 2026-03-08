@@ -66,10 +66,18 @@ def main(season: str):
         trade_date = date.today()
 
         sync_teams(conn)
+
         log.info("Syncing incremental game stats (new dates only)...")
-        sync_incremental_game_stats(conn, season_id, season)
+        try:
+            sync_incremental_game_stats(conn, season_id, season)
+        except Exception as e:
+            log.warning("Game stats sync failed (NBA API may be unreachable from this network): %s — continuing with existing data", e)
+
         log.info("Syncing standings...")
-        sync_standings(conn, season_id, season)
+        try:
+            sync_standings(conn, season_id, season)
+        except Exception as e:
+            log.warning("Standings sync failed: %s — continuing (win%% uses game_stats, not standings)", e)
 
         prior_avgs = fetch_prior_season_averages(season)
         season_start = s["start_date"]
