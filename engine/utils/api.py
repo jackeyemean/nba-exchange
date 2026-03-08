@@ -10,11 +10,14 @@ log = logging.getLogger(__name__)
 # Max retries for transient failures (timeouts, connection errors)
 MAX_RETRIES = 4
 RETRY_BACKOFF = 3  # seconds, doubles each attempt
+# Longer timeout for GitHub Actions / cloud runners (NBA API is slow from datacenter IPs)
+REQUEST_TIMEOUT = 90
 
 
 def safe_request(endpoint_cls, **kwargs):
     """Call nba_api endpoint with delay and retries on failure (timeouts, connection errors)."""
     time.sleep(REQUEST_DELAY)
+    kwargs.setdefault("timeout", REQUEST_TIMEOUT)
     last_err = None
     for attempt in range(MAX_RETRIES):
         try:
