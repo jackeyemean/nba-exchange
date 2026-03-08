@@ -48,7 +48,7 @@ def get_age_multiplier(birthdate: date | None, perf_score: float = 50.0) -> floa
 
 
 def get_win_pct_multiplier(team_win_pct: float, all_team_win_pcts: list[float]) -> float:
-    """Linear 0.90 (worst) to 1.15 (best) by league rank. Capped +15% / −10%."""
+    """Linear 0.90 (worst) to 1.15 (best) by league rank."""
     if not all_team_win_pcts:
         return 1.00
     sorted_pcts = sorted(all_team_win_pcts)

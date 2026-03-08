@@ -88,14 +88,14 @@ STAT_KEYS = ("pts", "fgm", "fga", "ftm", "fta", "fg3m", "fg3a", "oreb", "dreb", 
 # Age multiplier (formula.py)
 # ---------------------------------------------------------------------------
 PRIME_START = 30.0
-PRIME_END = 30.0
+PRIME_END = 32.0
 AGING_CAP_AGE = 40.0
-YOUTH_PURE_PER_YEAR = 0.01
-YOUTH_PERF_PER_YEAR = 0.10
-AGING_PURE_PER_YEAR = 0.01
-AGING_PERF_PER_YEAR = 0.10
+YOUTH_PURE_PER_YEAR = 0.005
+YOUTH_PERF_PER_YEAR = 0.15
+AGING_PURE_PER_YEAR = 0.02
+AGING_PERF_PER_YEAR = 0.03
 RAW_PERF_CAP_FOR_AGE = 100.0
-AGE_MULT_FLOOR = 0.50
+AGE_MULT_FLOOR = 0.75
 AGE_MULT_CEILING = 2.00
 
 # ---------------------------------------------------------------------------
@@ -107,4 +107,4 @@ WIN_PCT_BEST = 1.15
 # ---------------------------------------------------------------------------
 # Injury shock (formula.py - for injured_out status in daily formula)
 # ---------------------------------------------------------------------------
-INJURY_SHOCK = 0.50
+INJURY_SHOCK = 0.70

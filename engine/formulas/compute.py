@@ -35,6 +35,7 @@ def get_team_win_pcts_as_of_date(conn, season_id: int, as_of_date: date) -> dict
                 FROM game_stats gs
                 JOIN player_seasons ps ON gs.player_season_id = ps.id
                 WHERE ps.season_id = %s AND gs.game_date <= %s AND gs.wl IN ('W', 'L')
+                ORDER BY ps.team_id, gs.external_game_id, gs.wl DESC
             )
             SELECT team_id,
                    COUNT(*) FILTER (WHERE wl = 'W')::float / NULLIF(COUNT(*), 0) as win_pct
